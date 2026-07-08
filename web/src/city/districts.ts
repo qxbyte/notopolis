@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import type { CityModel, District } from '@shared/types';
 import { hashStr, rng0 } from '../util/seed';
 import { irregularDisc, irregularRing } from '../world/water';
@@ -144,7 +145,7 @@ function buildPark(
 
   // 长椅
   const bench = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 0.12, 0.25),
+    new SoftBox(0.7, 0.12, 0.25),
     new THREE.MeshLambertMaterial({ color: 0x8a6a45 })
   );
   bench.position.set(px - cx - 0.4, 0.62, pz - cz + 1.0);

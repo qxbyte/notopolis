@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import { rng0 } from '../util/seed';
 import { polyAt } from '../util/poly';
 import type { RoadWithPts } from '../city/roads';
@@ -242,7 +243,7 @@ function makeVillager(rnd: () => number): THREE.Group {
 
   // 背篓（颜色 0xa87c4f 与原型一致）
   if (basket) {
-    const bask = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.14), mat(0xa87c4f));
+    const bask = new THREE.Mesh(new SoftBox(0.2, 0.26, 0.14), mat(0xa87c4f));
     bask.position.set(0, 0.95, -0.22);
     g.add(bask);
   }

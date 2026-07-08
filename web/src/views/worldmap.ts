@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import { createOrbitCamera } from '../scene/camera';
 import type { WorldVault } from '../api';
 import { TIER } from '../ui/hud';
@@ -70,24 +71,24 @@ export function showWorldMap(
     } else if (vault.tier === 'village') {
       const offsets: [number, number][] = [[-1.2, -0.8], [1.2, -0.8], [0, 0.8]];
       for (const [ox, oz] of offsets) {
-        const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2, 1.2), makeMat(color));
+        const box = new THREE.Mesh(new SoftBox(1.2, 2, 1.2), makeMat(color));
         box.position.set(ox, 1, oz);
         group.add(box);
       }
     } else if (vault.tier === 'city') {
-      const b1 = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), makeMat(color));
+      const b1 = new THREE.Mesh(new SoftBox(2, 2.5, 2), makeMat(color));
       b1.position.set(-1.5, 1.25, 0);
-      const b2 = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), makeMat(color));
+      const b2 = new THREE.Mesh(new SoftBox(2, 2.5, 2), makeMat(color));
       b2.position.set(1.5, 1.25, 0);
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5, 1.2), makeMat(color));
+      const tower = new THREE.Mesh(new SoftBox(1.2, 5, 1.2), makeMat(color));
       tower.position.set(0, 2.5, 0);
       group.add(b1, b2, tower);
     } else if (vault.tier === 'capital') {
-      const b1 = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), makeMat(color));
+      const b1 = new THREE.Mesh(new SoftBox(2, 2.5, 2), makeMat(color));
       b1.position.set(-1.5, 1.25, 0);
-      const b2 = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 2), makeMat(color));
+      const b2 = new THREE.Mesh(new SoftBox(2, 2.5, 2), makeMat(color));
       b2.position.set(1.5, 1.25, 0);
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(1.2, 5, 1.2), makeMat(color));
+      const tower = new THREE.Mesh(new SoftBox(1.2, 5, 1.2), makeMat(color));
       tower.position.set(0, 2.5, 0);
       const domeMat = new THREE.MeshLambertMaterial({ color: vault.ok ? 0xFFD700 : 0x888888 });
       if (!vault.ok) { domeMat.transparent = true; domeMat.opacity = 0.4; }

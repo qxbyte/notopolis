@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import { polyAt } from '../util/poly';
 import { lightGreen } from '../city/roads';
 import type { RoadWithPts, TrafficLight } from '../city/roads';
@@ -86,23 +87,23 @@ function makeCar(type: 'bus' | 'car', color: number): THREE.Group {
   }
 
   if (type === 'bus') {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.75, 2.6), mat(color));
+    const body = new THREE.Mesh(new SoftBox(0.9, 0.75, 2.6), mat(color));
     body.position.y = 0.55;
     body.castShadow = true;
     g.add(body);
 
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.28, 1.9), mat(0xbfe0ea));
+    const win = new THREE.Mesh(new SoftBox(0.92, 0.28, 1.9), mat(0xbfe0ea));
     win.position.y = 0.72;
     g.add(win);
 
     addWheels([-0.9, 0, 0.9], [-0.42, 0.42]);
   } else {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.4, 1.5), mat(color));
+    const body = new THREE.Mesh(new SoftBox(0.75, 0.4, 1.5), mat(color));
     body.position.y = 0.38;
     body.castShadow = true;
     g.add(body);
 
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.32, 0.75), mat(0xbfe0ea));
+    const cabin = new THREE.Mesh(new SoftBox(0.65, 0.32, 0.75), mat(0xbfe0ea));
     cabin.position.set(0, 0.7, -0.1);
     g.add(cabin);
 
@@ -121,7 +122,7 @@ function makeTrainUnit(isEngine: boolean, color: number): THREE.Group {
   const wheelGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.1, 10);
 
   const bodyLen = isEngine ? 1.9 : 1.7;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, bodyLen), mat(color));
+  const body = new THREE.Mesh(new SoftBox(0.9, 0.8, bodyLen), mat(color));
   body.position.y = 0.6;
   body.castShadow = true;
   g.add(body);
@@ -137,11 +138,11 @@ function makeTrainUnit(isEngine: boolean, color: number): THREE.Group {
     stack.position.set(0, 1.15, 1.35);
     g.add(stack);
 
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.5, 0.7), mat(color));
+    const cab = new THREE.Mesh(new SoftBox(0.95, 0.5, 0.7), mat(color));
     cab.position.set(0, 1.15, -0.4);
     g.add(cab);
   } else {
-    const winStrip = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.25, 1.3), mat(0xbfe0ea));
+    const winStrip = new THREE.Mesh(new SoftBox(0.92, 0.25, 1.3), mat(0xbfe0ea));
     winStrip.position.y = 0.8;
     g.add(winStrip);
   }
@@ -200,7 +201,7 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
       const bg = new THREE.Group();
 
       // 车架
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), mat(0xd94848));
+      const frame = new THREE.Mesh(new SoftBox(0.05, 0.05, 0.6), mat(0xd94848));
       frame.position.y = 0.35;
       bg.add(frame);
 
@@ -252,7 +253,7 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
     const mid: [number, number] = [(p[0] + q[0]) / 2 - cx, (p[1] + q[1]) / 2 - cz];
 
     const base = new THREE.Mesh(
-      new THREE.BoxGeometry(len + 1.2, 0.1, 1.2),
+      new SoftBox(len + 1.2, 0.1, 1.2),
       mat(0x9a8f7c)
     );
     base.position.set(mid[0], 0.08, mid[1]);
@@ -261,7 +262,7 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
 
     for (const off of [-0.28, 0.28]) {
       const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(len + 1.2, 0.06, 0.08),
+        new SoftBox(len + 1.2, 0.06, 0.08),
         mat(0x555a60)
       );
       rail.position.set(
@@ -288,19 +289,19 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
   fus.rotation.x = Math.PI / 2;
   planeG.add(fus);
 
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(3, 0.06, 0.5), mat(0xd94848));
+  const wing = new THREE.Mesh(new SoftBox(3, 0.06, 0.5), mat(0xd94848));
   wing.position.set(0, 0.05, 0.2);
   planeG.add(wing);
 
-  const tailW = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 0.35), mat(0xd94848));
+  const tailW = new THREE.Mesh(new SoftBox(1.1, 0.05, 0.35), mat(0xd94848));
   tailW.position.set(0, 0.1, -1);
   planeG.add(tailW);
 
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.4), mat(0xd94848));
+  const fin = new THREE.Mesh(new SoftBox(0.05, 0.5, 0.4), mat(0xd94848));
   fin.position.set(0, 0.3, -1);
   planeG.add(fin);
 
-  const prop = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.0, 0.06), mat(0x2e3238));
+  const prop = new THREE.Mesh(new SoftBox(0.06, 1.0, 0.06), mat(0x2e3238));
   prop.position.set(0, 0, 1.15);
   planeG.add(prop);
   planeG.userData.prop = prop;
@@ -309,7 +310,7 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
 
   // ---- 帆船 boat ----
   const boatG = new THREE.Group();
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 2.6), mat(0x7a5c3e));
+  const hull = new THREE.Mesh(new SoftBox(1.2, 0.35, 2.6), mat(0x7a5c3e));
   hull.position.y = 0.1;
   boatG.add(hull);
 
@@ -329,15 +330,15 @@ export function spawnVehicles(scene: THREE.Scene, opts: SpawnVehiclesOpts): Vehi
 
   // ---- 快艇 speedboat ----
   const sbG = new THREE.Group();
-  const sbHull = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 1.8), mat(0xf2f2f2));
+  const sbHull = new THREE.Mesh(new SoftBox(0.8, 0.3, 1.8), mat(0xf2f2f2));
   sbHull.position.y = 0.12;
   sbG.add(sbHull);
 
-  const sbStripe = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.1, 1.2), mat(0xd94848));
+  const sbStripe = new THREE.Mesh(new SoftBox(0.82, 0.1, 1.2), mat(0xd94848));
   sbStripe.position.y = 0.25;
   sbG.add(sbStripe);
 
-  const sbShield = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.25, 0.06), mat(0xbfe0ea));
+  const sbShield = new THREE.Mesh(new SoftBox(0.6, 0.25, 0.06), mat(0xbfe0ea));
   sbShield.position.set(0, 0.4, 0.5);
   sbG.add(sbShield);
 

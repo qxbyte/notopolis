@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import type { CityModel, Road } from '@shared/types';
 import { rng0 } from '../util/seed';
 import { buildPolyline, segHit } from '../util/poly';
@@ -164,7 +165,7 @@ export function buildRoadMeshes(
       const dx = bx - ax, dz = bz - az;
       const len = Math.hypot(dx, dz);
       if (len < 0.1) continue;
-      const geo = new THREE.BoxGeometry(len + w * 0.5, 0.07, w);
+      const geo = new SoftBox(len + w * 0.5, 0.07, w);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set((ax + bx) / 2, y, (az + bz) / 2);
       mesh.rotation.y = -Math.atan2(dz, dx);
@@ -197,7 +198,7 @@ export function buildTrafficLightMeshes(
 
     // 灯箱
     const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.78, 0.22),
+      new SoftBox(0.28, 0.78, 0.22),
       new THREE.MeshLambertMaterial({ color: 0x2e3238 })
     );
     head.position.set(px, 2.95, pz);

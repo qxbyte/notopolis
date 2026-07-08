@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import { lakeShapeR, segHit } from '../util/poly';
 import type { WorldParams } from './params';
 import type { RoadWithPts } from '../city/roads';
@@ -186,14 +187,14 @@ export function buildBridges(
         const w = r.kind === 'main' ? 2.6 : r.kind === 'avenue' ? 2.1 : 1.3;
         const yDeck = canalY[j] + 0.12;
 
-        const deck = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.16, w), deckMat);
+        const deck = new THREE.Mesh(new SoftBox(5.4, 0.16, w), deckMat);
         deck.position.set(hit[0], yDeck, hit[1]);
         deck.rotation.y = -ang;
         deck.castShadow = true;
         scene.add(deck);
 
         for (const s of [-1, 1] as const) {
-          const rail = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.32, 0.09), railMat);
+          const rail = new THREE.Mesh(new SoftBox(5.4, 0.32, 0.09), railMat);
           rail.position.set(
             hit[0] + -Math.sin(ang) * s * (w / 2),
             yDeck + 0.24,

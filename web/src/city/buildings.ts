@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { SoftBox } from '../scene/softbox';
 import type { Building, CityModel } from '@shared/types';
 import { rng0 } from '../util/seed';
 
@@ -77,12 +78,12 @@ function addWindows(
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
       if (rnd() < 0.25) continue;
-      const win = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.42, 0.05), mat);
+      const win = new THREE.Mesh(new SoftBox(0.32, 0.42, 0.05), mat);
       win.position.set((c + 0.5 - cols / 2) * 0.9, 1.1 + r * 1.3, bd / 2 + 0.02);
       g.add(win);
       if (active) glowWindows.push(win);
     }
-  const door = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.06), M(0x6f5a3e));
+  const door = new THREE.Mesh(new SoftBox(0.5, 0.85, 0.06), M(0x6f5a3e));
   door.position.set(0, 0.93, bd / 2 + 0.03);
   g.add(door);
 }
@@ -100,7 +101,7 @@ function addChimney(
   smokes: SmokePuff[],
   rng: () => number
 ): void {
-  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.9, 0.35), M(0x9a8f80));
+  const ch = new THREE.Mesh(new SoftBox(0.35, 0.9, 0.35), M(0x9a8f80));
   ch.position.set(bw * 0.28, bh + 0.75, -bd * 0.2);
   g.add(ch);
   if (active && smokes.length < 40) {
@@ -162,7 +163,7 @@ export function buildBuildings(
         for (let tItr = 0; tItr < tiers; tItr++) {
           const tw = bw * (1.5 - tItr * 0.35);
           const th = 1.7;
-          const body = new THREE.Mesh(new THREE.BoxGeometry(tw, th, tw), M(wallC));
+          const body = new THREE.Mesh(new SoftBox(tw, th, tw), M(wallC));
           body.position.y = 0.5 + tItr * (th + 0.35) + th / 2;
           body.castShadow = body.receiveShadow = true;
           g.add(body);
@@ -177,7 +178,7 @@ export function buildBuildings(
         g.add(finial);
         addWindows(g, bw * 1.4, 1.6, bw * 1.5, rnd, active, glowWindows);
       } else if (arch === 'civic') { // 区府：门廊立柱 + 旗
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.6, 2.4, bd * 1.2), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw * 1.6, 2.4, bd * 1.2), M(wallC));
         body.position.y = 0.5 + 1.2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -190,7 +191,7 @@ export function buildBuildings(
           col.position.set((i - 1.5) * 0.7, 1.3, bd * 0.6 + 0.35);
           g.add(col);
         }
-        const porch = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.4, 0.12, 1), M(roofC));
+        const porch = new THREE.Mesh(new SoftBox(bw * 1.4, 0.12, 1), M(roofC));
         porch.position.set(0, 2.15, bd * 0.6 + 0.35);
         g.add(porch);
         const plaza = new THREE.Mesh(new THREE.CylinderGeometry(bw * 1.8, bw * 1.8, 0.08, 24), M(0xcfc2a0));
@@ -199,7 +200,7 @@ export function buildBuildings(
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3, 6), M(0x8a6a45));
         pole.position.set(bw * 1.1, 2, bd * 0.5);
         g.add(pole);
-        const flag = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.04), M(0xa85c50));
+        const flag = new THREE.Mesh(new SoftBox(0.9, 0.55, 0.04), M(0xa85c50));
         flag.position.set(bw * 1.1 + 0.5, 3.2, bd * 0.5);
         g.add(flag);
         addWindows(g, bw * 1.6, 2.4, bd * 1.2, rnd, active, glowWindows);
@@ -209,7 +210,7 @@ export function buildBuildings(
         body.castShadow = body.receiveShadow = true;
         g.add(body);
         for (let i = 0; i < 6; i++) {
-          const crenel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.3), M(0xa8a090));
+          const crenel = new THREE.Mesh(new SoftBox(0.3, 0.4, 0.3), M(0xa8a090));
           const ang = (i / 6) * Math.PI * 2;
           crenel.position.set(Math.cos(ang) * bw * 0.5, bh + 1.7, Math.sin(ang) * bw * 0.5);
           g.add(crenel);
@@ -220,7 +221,7 @@ export function buildBuildings(
         g.add(cone);
         addWindows(g, bw * 0.8, bh, bw * 0.9, rnd, active, glowWindows);
       } else if (arch === 'manor') { // 庄园：主楼 + 侧翼
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw, bh, bd), M(wallC));
         body.position.y = 0.5 + bh / 2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -228,7 +229,7 @@ export function buildBuildings(
         roof.position.y = 0.5 + bh;
         roof.castShadow = true;
         g.add(roof);
-        const wing = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.7, bh * 0.55, bd * 0.7), M(wallC));
+        const wing = new THREE.Mesh(new SoftBox(bw * 0.7, bh * 0.55, bd * 0.7), M(wallC));
         wing.position.set(bw * 0.8, 0.5 + bh * 0.275, bd * 0.1);
         wing.castShadow = true;
         g.add(wing);
@@ -238,22 +239,22 @@ export function buildBuildings(
         addWindows(g, bw, bh, bd, rnd, active, glowWindows);
         addChimney(g, bw, bh, bd, active, smokes, rnd);
       } else if (arch === 'hospital') { // 医院：白楼 + 红十字
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.5, 2.6, bd * 1.2), M(0xf4f7f4));
+        const body = new THREE.Mesh(new SoftBox(bw * 1.5, 2.6, bd * 1.2), M(0xf4f7f4));
         body.position.y = 0.5 + 1.3;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
-        const top = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.6, 0.15, bd * 1.3), M(0xc9d4d8));
+        const top = new THREE.Mesh(new SoftBox(bw * 1.6, 0.15, bd * 1.3), M(0xc9d4d8));
         top.position.y = 3.18;
         g.add(top);
         const crossMat = new THREE.MeshBasicMaterial({ color: 0xe23b3b });
-        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.06), crossMat);
+        const crossV = new THREE.Mesh(new SoftBox(0.2, 0.7, 0.06), crossMat);
         crossV.position.set(0, 2.4, bd * 0.6 + 0.04);
-        const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.06), crossMat);
+        const crossH = new THREE.Mesh(new SoftBox(0.7, 0.2, 0.06), crossMat);
         crossH.position.copy(crossV.position);
         g.add(crossV, crossH);
         addWindows(g, bw * 1.5, 2.6, bd * 1.2, rnd, active, glowWindows);
       } else if (arch === 'school') { // 学校：教学楼 + 钟塔 + 前院
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.4, 2.2, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw * 1.4, 2.2, bd), M(wallC));
         body.position.y = 0.5 + 1.1;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -261,7 +262,7 @@ export function buildBuildings(
         roof.position.y = 2.7;
         roof.castShadow = true;
         g.add(roof);
-        const towerB = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.6, 0.7), M(wallC));
+        const towerB = new THREE.Mesh(new SoftBox(0.7, 3.6, 0.7), M(wallC));
         towerB.position.set(bw * 0.55, 0.5 + 1.8, 0);
         g.add(towerB);
         const towerR = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.7, 4), M(roofC));
@@ -271,12 +272,12 @@ export function buildBuildings(
         const bell = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6), M(0xd9b23e));
         bell.position.set(bw * 0.55, 4.0, 0);
         g.add(bell);
-        const yard = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.2, 0.06, 1.4), M(0xc9a86a));
+        const yard = new THREE.Mesh(new SoftBox(bw * 1.2, 0.06, 1.4), M(0xc9a86a));
         yard.position.set(0, 0.56, bd / 2 + 0.9);
         g.add(yard);
         addWindows(g, bw * 1.4, 2.2, bd, rnd, active, glowWindows);
       } else if (arch === 'library') { // 图书馆：柱廊 + 山花 + 台阶
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.5, 1.9, bd * 1.1), M(0xe8dfc8));
+        const body = new THREE.Mesh(new SoftBox(bw * 1.5, 1.9, bd * 1.1), M(0xe8dfc8));
         body.position.y = 0.5 + 0.95;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -289,12 +290,12 @@ export function buildBuildings(
           col.position.set((i - 1.5) * 0.55, 1.25, bd * 0.55 + 0.3);
           g.add(col);
         }
-        const steps = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.2, 0.18, 0.8), M(0xcfc2a0));
+        const steps = new THREE.Mesh(new SoftBox(bw * 1.2, 0.18, 0.8), M(0xcfc2a0));
         steps.position.set(0, 0.6, bd * 0.55 + 0.6);
         g.add(steps);
         addWindows(g, bw * 1.5, 1.9, bd * 1.1, rnd, active, glowWindows);
       } else if (arch === 'chapel') { // 礼拜堂：窄身陡顶 + 尖塔金球
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.9, 2.2, bd * 1.3), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw * 0.9, 2.2, bd * 1.3), M(wallC));
         body.position.y = 0.5 + 1.1;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -302,7 +303,7 @@ export function buildBuildings(
         roof.position.y = 2.7;
         roof.castShadow = true;
         g.add(roof);
-        const spireB = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.6, 0.6), M(wallC));
+        const spireB = new THREE.Mesh(new SoftBox(0.6, 1.6, 0.6), M(wallC));
         spireB.position.set(0, 3.4, bd * 0.45);
         g.add(spireB);
         const spire = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 6), M(roofC));
@@ -321,15 +322,15 @@ export function buildBuildings(
         }
         const stripes = [0xd94848, 0xf2ead8];
         for (let i = 0; i < 6; i++) {
-          const sMesh = new THREE.Mesh(new THREE.BoxGeometry((bw * 1.3) / 6, 0.05, bd * 1.05), M(stripes[i % 2]));
+          const sMesh = new THREE.Mesh(new SoftBox((bw * 1.3) / 6, 0.05, bd * 1.05), M(stripes[i % 2]));
           sMesh.position.set((i - 2.5) * ((bw * 1.3) / 6), 0.5 + 1.75 - i * 0.02, 0);
           sMesh.rotation.z = -0.06;
           g.add(sMesh);
         }
-        const stall = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.7, bd * 0.5), M(0xa87c4f));
+        const stall = new THREE.Mesh(new SoftBox(bw, 0.7, bd * 0.5), M(0xa87c4f));
         stall.position.y = 0.85;
         g.add(stall);
-        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), M(0xc9a86a));
+        const crate = new THREE.Mesh(new SoftBox(0.4, 0.4, 0.4), M(0xc9a86a));
         crate.position.set(bw * 0.4, 0.7, bd * 0.4);
         g.add(crate);
         const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 8), M(0x8a6a45));
@@ -345,7 +346,7 @@ export function buildBuildings(
         g.add(cap);
         const blades = new THREE.Group();
         for (let i = 0; i < 4; i++) {
-          const blade = new THREE.Mesh(new THREE.BoxGeometry(0.25, 2.2, 0.05), M(0xf2ead8));
+          const blade = new THREE.Mesh(new SoftBox(0.25, 2.2, 0.05), M(0xf2ead8));
           blade.position.y = 1.1;
           const armG = new THREE.Group();
           armG.rotation.z = (i * Math.PI) / 2;
@@ -355,11 +356,11 @@ export function buildBuildings(
         blades.position.set(0, 3.9, 1.05);
         g.add(blades);
         windmills.push(blades);
-        const mDoor = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.06), M(0x6f5a3e));
+        const mDoor = new THREE.Mesh(new SoftBox(0.5, 0.85, 0.06), M(0x6f5a3e));
         mDoor.position.set(0, 0.93, 1.05);
         g.add(mDoor);
       } else if (arch === 'inn') { // 客栈：小楼 + 挑出招牌
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw, bh, bd), M(wallC));
         body.position.y = 0.5 + bh / 2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -367,31 +368,31 @@ export function buildBuildings(
         roof.position.y = 0.5 + bh;
         roof.castShadow = true;
         g.add(roof);
-        const signArm = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.06), M(0x6f5a3e));
+        const signArm = new THREE.Mesh(new SoftBox(0.7, 0.06, 0.06), M(0x6f5a3e));
         signArm.position.set(bw / 2 + 0.3, 0.5 + bh * 0.75, bd * 0.3);
         g.add(signArm);
-        const sign = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.35, 0.04), M(0xd9b23e));
+        const sign = new THREE.Mesh(new SoftBox(0.45, 0.35, 0.04), M(0xd9b23e));
         sign.position.set(bw / 2 + 0.55, 0.5 + bh * 0.75 - 0.25, bd * 0.3);
         g.add(sign);
         addWindows(g, bw, bh, bd, rnd, active, glowWindows);
         if (rnd() < 0.7) addChimney(g, bw, bh, bd, active, smokes, rnd);
       } else if (arch === 'workshop') { // 工坊：平顶 + 大烟囱 + 雨棚
         bh = Math.max(1.4, bh * 0.8);
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.15, bh, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw * 1.15, bh, bd), M(wallC));
         body.position.y = 0.5 + bh / 2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
-        const top = new THREE.Mesh(new THREE.BoxGeometry(bw * 1.25, 0.15, bd * 1.1), M(roofC));
+        const top = new THREE.Mesh(new SoftBox(bw * 1.25, 0.15, bd * 1.1), M(roofC));
         top.position.y = 0.5 + bh + 0.08;
         g.add(top);
-        const awning = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.7, 0.08, 0.8), M(roofC));
+        const awning = new THREE.Mesh(new SoftBox(bw * 0.7, 0.08, 0.8), M(roofC));
         awning.position.set(0, 0.5 + bh * 0.62, bd / 2 + 0.42);
         awning.rotation.x = 0.25;
         g.add(awning);
         addWindows(g, bw, bh, bd, rnd, active, glowWindows);
         addChimney(g, bw, bh + 0.3, bd, active, smokes, rnd);
       } else if (arch === 'townhouse') { // 联排小楼：双坡 + 山墙窗
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw, bh, bd), M(wallC));
         body.position.y = 0.5 + bh / 2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -399,14 +400,14 @@ export function buildBuildings(
         roof.position.y = 0.5 + bh;
         roof.castShadow = true;
         g.add(roof);
-        const dormer = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.4), M(wallC));
+        const dormer = new THREE.Mesh(new SoftBox(0.5, 0.5, 0.4), M(wallC));
         dormer.position.set(0, 0.5 + bh + bh * 0.16, bd * 0.4);
         g.add(dormer);
         addWindows(g, bw, bh, bd, rnd, active, glowWindows);
         if (rnd() < 0.6) addChimney(g, bw, bh, bd, active, smokes, rnd);
       } else { // cottage 农舍：矮身大顶
         bh = Math.max(1.3, bh * 0.85);
-        const body = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), M(wallC));
+        const body = new THREE.Mesh(new SoftBox(bw, bh, bd), M(wallC));
         body.position.y = 0.5 + bh / 2;
         body.castShadow = body.receiveShadow = true;
         g.add(body);
@@ -420,7 +421,7 @@ export function buildBuildings(
 
       // dormant：苔藓墙脚 + 屋顶杂草
       if (dormant) {
-        const moss = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.2, 0.3, bd + 0.2), M(0x5a7a4f));
+        const moss = new THREE.Mesh(new SoftBox(bw + 0.2, 0.3, bd + 0.2), M(0x5a7a4f));
         moss.position.y = 0.66;
         g.add(moss);
         const weed = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.4, 5), M(0x6d8a50));
@@ -435,7 +436,7 @@ export function buildBuildings(
           post.position.set(sx * (bw / 2 + 0.3), 0.5 + (bh + 1.2) / 2, sz * (bd / 2 + 0.3));
           g.add(post);
         }
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.7, 0.08, bd + 0.7), M(0x8a6a45));
+        const frame = new THREE.Mesh(new SoftBox(bw + 0.7, 0.08, bd + 0.7), M(0x8a6a45));
         frame.position.y = bh + 1.6;
         g.add(frame);
       }
