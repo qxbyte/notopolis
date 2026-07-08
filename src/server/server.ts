@@ -6,8 +6,11 @@ import { loadConfig, makeVault, saveConfig } from './config.js';
 import { buildGraph } from './graph.js';
 import { buildCityModel, tierOf } from './layout/city.js';
 import { scanVault } from './scanner.js';
+import type { VaultConfig } from '../shared/types.js';
 
 type WS = { readyState: number; send(s: string): void; on(ev: string, fn: () => void): void };
+
+const THEMES = ['plains', 'mountain', 'harbor', 'snow'] as const;
 
 export async function createServer(): Promise<{
   app: FastifyInstance;
@@ -52,7 +55,8 @@ export async function createServer(): Promise<{
     const body = req.body as { name?: string; path?: string; theme?: string };
     if (!body?.name || !body?.path) return reply.code(400).send({ error: 'name/path required' });
     const cfg = await loadConfig();
-    const vault = makeVault(body.name, body.path, (body.theme as never) ?? 'plains');
+    const theme = THEMES.includes(body.theme as never) ? (body.theme as VaultConfig['theme']) : 'plains';
+    const vault = makeVault(body.name, body.path, theme);
     if (!cfg.vaults.some((v) => v.id === vault.id)) cfg.vaults.push(vault);
     await saveConfig(cfg);
     return vault;

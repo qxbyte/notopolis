@@ -61,4 +61,15 @@ describe('REST API', () => {
     const evil = await app.inject(`/api/note/${v.id}?path=${encodeURIComponent('../../etc/passwd')}`);
     expect(evil.statusCode).toBe(400);
   });
+
+  it('非法 theme 回落到 plains', async () => {
+    const { app } = await createServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/vaults',
+      payload: { name: '非法主题', path: FIXTURE, theme: 'hacker' },
+    });
+    const vault = res.json() as { theme: string };
+    expect(vault.theme).toBe('plains');
+  });
 });
