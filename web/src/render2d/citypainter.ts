@@ -47,6 +47,29 @@ function footprintR(b: Building): number {
 }
 
 /* ------------------------------------------------------------------ */
+/* Helper: 平行折线偏移（法向量法）                                       */
+/* ------------------------------------------------------------------ */
+
+function offsetPolyline(
+  pts: ReadonlyArray<readonly [number, number]>,
+  offset: number,
+): [number, number][] {
+  const result: [number, number][] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = next[0] - prev[0];
+    const dz = next[1] - prev[1];
+    const len = Math.sqrt(dx * dx + dz * dz) || 1;
+    // 法向量（垂直于切线，指向左侧）
+    const nx = -dz / len;
+    const nz = dx / len;
+    result.push([pts[i][0] + nx * offset, pts[i][1] + nz * offset]);
+  }
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
 /* 层 1 — 纸底                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -173,26 +196,9 @@ function paintRiver(
 
   if (pts.length < 2) return;
 
-  // 计算左右两岸偏移点
-  function offsetPts(side: number, offset: number): [number, number][] {
-    const result: [number, number][] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const prev = pts[Math.max(0, i - 1)];
-      const next = pts[Math.min(pts.length - 1, i + 1)];
-      const dx = next[0] - prev[0];
-      const dz = next[1] - prev[1];
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      // 法向量（垂直于切线）
-      const nx = -dz / len;
-      const nz = dx / len;
-      result.push([pts[i][0] + nx * offset * side, pts[i][1] + nz * offset * side]);
-    }
-    return result;
-  }
-
   const bankOffset = RIVER_W / 2 + 0.8;
-  const leftBank = offsetPts(1, bankOffset);
-  const rightBank = offsetPts(-1, bankOffset);
+  const leftBank = offsetPolyline(pts, bankOffset);
+  const rightBank = offsetPolyline(pts, -bankOffset);
 
   // 中间水面填充（多边形近似）
   (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
@@ -250,24 +256,8 @@ function paintCanal(
   const canalW = RIVER_W * 0.6;
   const halfW = canalW / 2;
 
-  // 两岸线
-  function offsetCanalPts(side: number): [number, number][] {
-    const result: [number, number][] = [];
-    for (let i = 0; i < canalPts.length; i++) {
-      const prev = canalPts[Math.max(0, i - 1)];
-      const next = canalPts[Math.min(canalPts.length - 1, i + 1)];
-      const dx = next[0] - prev[0];
-      const dz = next[1] - prev[1];
-      const len = Math.sqrt(dx * dx + dz * dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-      result.push([canalPts[i][0] + nx * halfW * side, canalPts[i][1] + nz * halfW * side]);
-    }
-    return result;
-  }
-
-  const leftBank = offsetCanalPts(1);
-  const rightBank = offsetCanalPts(-1);
+  const leftBank = offsetPolyline(canalPts, halfW);
+  const rightBank = offsetPolyline(canalPts, -halfW);
 
   // 水面填充
   (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
@@ -434,6 +424,29 @@ function paintRoads(
   roads: Road[],
   wsPrefix: string,
 ): void {
+  // 预先收集所有 main 路的全部途经点，用于判断路口（两条不同 main 路的点互相靠近）
+  const mainRoads = roads.filter(r => r.kind === 'main');
+
+  // 对每条 main 路，找出其点中与其他 main 路的任意点距离 ≤3 的点（路口候选）
+  const INTERSECTION_THRESHOLD = 3;
+  function isIntersectionPt(
+    roadIdx: number,
+    px: number,
+    pz: number,
+  ): boolean {
+    for (let j = 0; j < mainRoads.length; j++) {
+      if (j === roadIdx) continue;
+      for (const [ox, oz] of mainRoads[j].points) {
+        const dx = px - ox;
+        const dz = pz - oz;
+        if (dx * dx + dz * dz <= INTERSECTION_THRESHOLD * INTERSECTION_THRESHOLD) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   for (const road of roads) {
     if (road.kind === 'street') continue; // street 一律跳过
 
@@ -443,24 +456,9 @@ function paintRoads(
 
     if (pts.length < 2) continue;
 
-    // 计算两侧偏移点
-    function offsetRoadPts(side: number): [number, number][] {
-      const result: [number, number][] = [];
-      for (let i = 0; i < pts.length; i++) {
-        const prev = pts[Math.max(0, i - 1)];
-        const next = pts[Math.min(pts.length - 1, i + 1)];
-        const dx = next[0] - prev[0];
-        const dz = next[1] - prev[1];
-        const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        const nx = -dz / len;
-        const nz = dx / len;
-        result.push([pts[i][0] + nx * (roadWidth / 2) * side, pts[i][1] + nz * (roadWidth / 2) * side]);
-      }
-      return result;
-    }
-
-    const leftEdge = offsetRoadPts(1);
-    const rightEdge = offsetRoadPts(-1);
+    const halfRoad = roadWidth / 2;
+    const leftEdge = offsetPolyline(pts, halfRoad);
+    const rightEdge = offsetPolyline(pts, -halfRoad);
 
     // 路面填充
     (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.roadFill;
@@ -488,9 +486,11 @@ function paintRoads(
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
     dashedPath(ctx, pts, [4, 6]);
 
-    // 路口红绿灯（相邻 main 路口处 3 个小圆点）
+    // 路口红绿灯（仅在与其他 main 路相交的路口处画 3 个小圆点）
     if (road.kind === 'main') {
+      const roadIdx = mainRoads.indexOf(road);
       for (const [px, pz] of pts) {
+        if (!isIntersectionPt(roadIdx, px, pz)) continue;
         // 红/黄/绿 三个小点
         const colors = ['#e05050', '#e0c050', '#50c050'];
         for (let ci = 0; ci < 3; ci++) {
@@ -796,14 +796,13 @@ function paintTrees(
 
       const tr = 1.5 + rng() * 1.0; // 1.5-2.5
 
-      // 树冠
+      // 树冠（一次 beginPath，fill 与 stroke 共享同一路径）
       (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
       (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
       (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
       scribbleBlob(ctx, rng, tx, tz, tr);
       ctx.fill();
-      scribbleBlob(ctx, rng, tx, tz, tr);
       ctx.stroke();
       (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
