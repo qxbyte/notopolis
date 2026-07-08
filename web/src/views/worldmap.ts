@@ -222,11 +222,14 @@ export function showWorldMap(
       // 移除场景中本视图添加的对象
       scene.remove(ground);
       ground.geometry.dispose();
+      groundMat.dispose();
       for (const { group } of vaultGroups) {
         scene.remove(group);
         group.traverse((o) => {
           if (o instanceof THREE.Mesh) {
             o.geometry.dispose();
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach((m) => m?.dispose?.());
           }
         });
       }
@@ -234,6 +237,8 @@ export function showWorldMap(
       for (const line of tradeLines) {
         scene.remove(line);
         line.geometry.dispose();
+        const mats = Array.isArray(line.material) ? line.material : [line.material];
+        mats.forEach((m) => m?.dispose?.());
       }
     },
   };

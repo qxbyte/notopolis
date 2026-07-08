@@ -202,7 +202,10 @@ export function showCity(
       scene.remove(rootGroup);
       rootGroup.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) {
-          (o as THREE.Mesh).geometry.dispose();
+          const mesh = o as THREE.Mesh;
+          mesh.geometry.dispose();
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          mats.forEach((m) => m?.dispose?.());
         }
       });
       // 清理 DOM

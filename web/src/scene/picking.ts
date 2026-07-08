@@ -30,9 +30,10 @@ export function createPicking(opts: PickingOptions): { dispose(): void } {
   const mouse = new THREE.Vector2();
 
   function pick(e: MouseEvent): UserData | null {
+    const rect = dom.getBoundingClientRect();
     mouse.set(
-      (e.clientX / window.innerWidth) * 2 - 1,
-      -(e.clientY / window.innerHeight) * 2 + 1
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
     ray.setFromCamera(mouse, camera);
     for (const h of ray.intersectObjects(pickables, true)) {
