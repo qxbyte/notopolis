@@ -7,21 +7,7 @@
 import * as THREE from 'three';
 import { lakeShapeR, segHit } from '../util/poly';
 import type { WorldParams } from './params';
-import type { Road } from '@shared/types';
-
-// --------------------------------------------------------------------------
-// 类型
-// --------------------------------------------------------------------------
-
-/**
- * 已做蜿蜒路径预处理的道路对象（F5 任务产出，buildBridges 接受此类型）。
- * pts 坐标为相对城市中心的偏移量（与 canalPts 同坐标系）。
- */
-export type RoadWithPts = Road & {
-  pts: [number, number][];
-  lens: number[];
-  total: number;
-};
+import type { RoadWithPts } from '../city/roads';
 
 // --------------------------------------------------------------------------
 // 内部材质工厂

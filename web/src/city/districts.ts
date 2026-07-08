@@ -97,8 +97,8 @@ function buildPark(
   let px = d.x, pz = d.z;
 
   for (let i = 0; i < 14; i++) {
-    const tx = d.x + rnd() * d.width;
-    const tz = d.z + rnd() * d.depth;
+    const tx = d.x + 2 + rnd() * (d.width - 4);
+    const tz = d.z + 2 + rnd() * (d.depth - 4);
     let minD = 1e9;
     for (const b of d.buildings) {
       const dd = Math.hypot(b.x - tx, b.z - tz);
@@ -209,6 +209,7 @@ function buildShrubs(
   cz: number,
   wsPrefix: string
 ): void {
+  // 与雏形差异：灌木使用独立 rng 种子（':shrub:'）而非与池塘共享 ':deco:' 流——主动解耦，视觉等价
   const rndS = rng0(wsPrefix + ':shrub:' + d.dir);
 
   const nB = 3 + Math.floor(rndS() * 4);
