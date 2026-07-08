@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .superpowers/
+web/dist/
+test-results/
+playwright-report/

@@ -29,6 +29,10 @@ import type { CityModel } from '@shared/types';
 
 export interface CityViewHandle {
   dispose(): void;
+  /** 可拾取对象数量（供调试钩子读取） */
+  pickableCount: number;
+  /** 对 pickables[index] 触发等价于鼠标点击的卡片显示 */
+  triggerPick(index: number): void;
 }
 
 export function showCity(
@@ -193,6 +197,20 @@ export function showCity(
   animId = requestAnimationFrame(loop);
 
   return {
+    pickableCount: pickables.length,
+
+    triggerPick(index: number): void {
+      if (index < 0 || index >= pickables.length) return;
+      const obj = pickables[index];
+      const u = obj.userData as import('../scene/picking.js').UserData | undefined;
+      if (!u?.type) return;
+      if (u.type === 'building') {
+        cards.showBuilding(u.b, u.dir, vault.path);
+      } else if (u.type === 'district') {
+        cards.showDistrict(u.district, Date.now());
+      }
+    },
+
     dispose(): void {
       cancelAnimationFrame(animId);
       orbitCamera.dispose();

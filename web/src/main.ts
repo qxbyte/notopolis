@@ -5,6 +5,7 @@ import { createScene } from './scene/setup';
 import { showOnboarding } from './ui/onboarding';
 import { showWorldMap } from './views/worldmap';
 import { showCity } from './views/cityview';
+import type { CityViewHandle } from './views/cityview';
 
 const container = document.getElementById('app') as HTMLElement;
 const { scene, renderer } = createScene(container);
@@ -12,6 +13,20 @@ const { scene, renderer } = createScene(container);
 let current: { dispose(): void } | null = null;
 let currentVaultId: string | null = null;
 let navigating = false;
+
+// 调试对象（在每次视图切换时更新）
+const __notopolis: {
+  view: 'onboarding' | 'worldmap' | 'city';
+  pickables: number;
+  enterCity: (vaultId: string) => void;
+  pickBuilding: (index: number) => void;
+} = {
+  view: 'onboarding',
+  pickables: 0,
+  enterCity: (_vaultId: string) => { /* 初始化前无操作 */ },
+  pickBuilding: (_index: number) => { /* 初始化前无操作 */ },
+};
+(window as any).__notopolis = __notopolis;
 
 function clearCurrent(): void {
   current?.dispose();
@@ -26,6 +41,14 @@ async function goWorldMap(): Promise<void> {
     clearCurrent();
     const { vaults } = await fetchWorld();
     current = showWorldMap({ scene, renderer, container }, vaults, goCity);
+    __notopolis.view = 'worldmap';
+    __notopolis.pickables = 0;
+    __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
+    __notopolis.enterCity = async (vaultId: string) => {
+      const { vaults: allVaults } = await fetchWorld();
+      const vault = allVaults.find((v) => v.id === vaultId);
+      if (vault) await goCity(vault);
+    };
   } finally {
     navigating = false;
   }
@@ -38,7 +61,16 @@ async function goCity(vault: WorldVault): Promise<void> {
     clearCurrent();
     currentVaultId = vault.id;
     const city = await fetchCity(vault.id);
-    current = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+    const cityHandle: CityViewHandle = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+    current = cityHandle;
+    __notopolis.view = 'city';
+    __notopolis.pickables = cityHandle.pickableCount;
+    __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
+    __notopolis.enterCity = async (vaultId: string) => {
+      const { vaults: allVaults } = await fetchWorld();
+      const v = allVaults.find((x) => x.id === vaultId);
+      if (v) await goCity(v);
+    };
   } finally {
     navigating = false;
   }
@@ -47,6 +79,7 @@ async function goCity(vault: WorldVault): Promise<void> {
 async function init(): Promise<void> {
   const { vaults } = await fetchWorld();
   if (vaults.length === 0) {
+    __notopolis.view = 'onboarding';
     showOnboarding(container, goWorldMap);
   } else {
     await goWorldMap();
