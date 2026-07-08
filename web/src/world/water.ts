@@ -76,7 +76,7 @@ function ribbon(
 // 不规则水面构建器
 // --------------------------------------------------------------------------
 
-function irregularDisc(
+export function irregularDisc(
   seed: number,
   r: number,
   y: number,
@@ -99,7 +99,7 @@ function irregularDisc(
   return new THREE.Mesh(g, mat);
 }
 
-function irregularRing(
+export function irregularRing(
   seed: number,
   r: number,
   w: number,
