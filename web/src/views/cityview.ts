@@ -33,6 +33,8 @@ export interface CityViewHandle {
   pickableCount: number;
   /** 对 pickables[index] 触发等价于鼠标点击的卡片显示 */
   triggerPick(index: number): void;
+  /** 性能探针：draw calls / 三角形 / 帧时间统计（供调试钩子读取） */
+  perf(): Record<string, number>;
 }
 
 export function showCity(
@@ -182,6 +184,8 @@ export function showCity(
 
   // ---- 渲染循环 ----
   let animId: number;
+  const frameTimes: number[] = [];
+  let lastFrameT = 0;
 
   function loop(t: number): void {
     animId = requestAnimationFrame(loop);
@@ -193,12 +197,30 @@ export function showCity(
     updateVehicles(vehicles, ts, cx, cz);
     updateClouds(clouds, ts, T);
     renderer.render(scene, orbitCamera.camera);
+    if (lastFrameT > 0) {
+      frameTimes.push(t - lastFrameT);
+      if (frameTimes.length > 240) frameTimes.shift();
+    }
+    lastFrameT = t;
   }
 
   animId = requestAnimationFrame(loop);
 
   return {
     pickableCount: pickables.length,
+
+    perf(): Record<string, number> {
+      const sorted = [...frameTimes].sort((a, b) => a - b);
+      const avg = sorted.length ? sorted.reduce((s, v) => s + v, 0) / sorted.length : 0;
+      return {
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+        geometries: renderer.info.memory.geometries,
+        avgMs: Math.round(avg * 10) / 10,
+        p95Ms: Math.round((sorted[Math.floor(sorted.length * 0.95)] ?? 0) * 10) / 10,
+        fps: avg ? Math.round(1000 / avg) : 0,
+      };
+    },
 
     triggerPick(index: number): void {
       if (index < 0 || index >= pickables.length) return;

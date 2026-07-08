@@ -20,11 +20,13 @@ const __notopolis: {
   pickables: number;
   enterCity: (vaultId: string) => void;
   pickBuilding: (index: number) => void;
+  perf: () => Record<string, number>;
 } = {
   view: 'onboarding',
   pickables: 0,
   enterCity,
   pickBuilding: (_index: number) => { /* 初始化前无操作 */ },
+  perf: () => ({}),
 };
 (window as any).__notopolis = __notopolis;
 
@@ -67,6 +69,7 @@ async function goCity(vault: WorldVault): Promise<void> {
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
     __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
+    __notopolis.perf = () => cityHandle.perf();
   } finally {
     navigating = false;
   }
