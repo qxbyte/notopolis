@@ -11,6 +11,7 @@ const { scene, renderer } = createScene(container);
 
 let current: { dispose(): void } | null = null;
 let currentVaultId: string | null = null;
+let navigating = false;
 
 function clearCurrent(): void {
   current?.dispose();
@@ -19,16 +20,28 @@ function clearCurrent(): void {
 }
 
 async function goWorldMap(): Promise<void> {
-  clearCurrent();
-  const { vaults } = await fetchWorld();
-  current = showWorldMap({ scene, renderer, container }, vaults, goCity);
+  if (navigating) return;
+  navigating = true;
+  try {
+    clearCurrent();
+    const { vaults } = await fetchWorld();
+    current = showWorldMap({ scene, renderer, container }, vaults, goCity);
+  } finally {
+    navigating = false;
+  }
 }
 
 async function goCity(vault: WorldVault): Promise<void> {
-  clearCurrent();
-  currentVaultId = vault.id;
-  const city = await fetchCity(vault.id);
-  current = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+  if (navigating) return;
+  navigating = true;
+  try {
+    clearCurrent();
+    currentVaultId = vault.id;
+    const city = await fetchCity(vault.id);
+    current = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+  } finally {
+    navigating = false;
+  }
 }
 
 async function init(): Promise<void> {
@@ -52,4 +65,10 @@ connectWS(async (vaultId: string) => {
   }
 });
 
-init();
+init().catch((err: unknown) => {
+  const msg = document.createElement('div');
+  msg.id = 'init-error';
+  msg.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1e1a2e;color:#e06060;font-size:1.1rem;font-family:sans-serif;flex-direction:column;gap:1rem;';
+  msg.innerHTML = `<div>⚠ 无法连接到 Notopolis 后端</div><div style="color:#706a88;font-size:0.85rem;">${String(err)}</div><button onclick="location.reload()" style="background:#3a3060;border:1px solid #6a5080;color:#c0a8e0;border-radius:6px;padding:0.5rem 1.5rem;cursor:pointer;font-size:0.9rem;">重试</button>`;
+  document.body.appendChild(msg);
+});

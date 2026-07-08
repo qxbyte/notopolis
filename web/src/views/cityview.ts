@@ -197,7 +197,7 @@ export function showCity(
       cancelAnimationFrame(animId);
       orbitCamera.dispose();
       picking.dispose();
-      scene.fog = null as unknown as THREE.FogBase;
+      scene.fog = null;
       // 移除所有场景对象（通过根 Group 一次性清理）
       scene.remove(rootGroup);
       rootGroup.traverse((o) => {

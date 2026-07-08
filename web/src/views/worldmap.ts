@@ -21,7 +21,7 @@ export function showWorldMap(
   const T = 200;
 
   // 清空雾（城市视图可能留下了）
-  scene.fog = undefined as unknown as THREE.FogBase;
+  scene.fog = null;
 
   // 绿色地面
   const groundGeo = new THREE.PlaneGeometry(400, 400);
@@ -221,9 +221,20 @@ export function showWorldMap(
       for (const label of labels) label.remove();
       // 移除场景中本视图添加的对象
       scene.remove(ground);
-      for (const { group } of vaultGroups) scene.remove(group);
+      ground.geometry.dispose();
+      for (const { group } of vaultGroups) {
+        scene.remove(group);
+        group.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            o.geometry.dispose();
+          }
+        });
+      }
       // 明确移除本视图创建的贸易路线，避免误删其他视图的 Line 对象
-      for (const line of tradeLines) scene.remove(line);
+      for (const line of tradeLines) {
+        scene.remove(line);
+        line.geometry.dispose();
+      }
     },
   };
 }
