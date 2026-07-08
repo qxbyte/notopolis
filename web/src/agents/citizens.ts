@@ -98,19 +98,17 @@ function makeVillager(rnd: () => number): THREE.Group {
   // 秃顶（老人男性）
   const baldElder = age === 'elder' && !female && rnd() < 0.4;
 
-  // 女性：额外判断发型（long / bun）；kid female：双马尾（不消费 rnd）
+  // 女性：先无条件消费 rnd 决定长发/丸子头（原型所有 female 都消费，包括 kid）
+  // 然后 kid female 额外叠加双马尾
   let longHair = false;
   let bun = false;
   if (female) {
-    if (age === 'kid') {
-      // 双马尾，无额外 rnd
+    if (rnd() < 0.5) {
+      longHair = true;
     } else {
-      if (rnd() < 0.5) {
-        longHair = true;
-      } else {
-        bun = true;
-      }
+      bun = true;
     }
+    // kid female：叠加双马尾（longHair/bun 仍保留）
   }
 
   // 成年男性：胡子
@@ -188,9 +186,9 @@ function makeVillager(rnd: () => number): THREE.Group {
     }
   }
 
-  // 胡子
+  // 胡子（用发色 hairC，与原型一致）
   if (beard) {
-    const beardMesh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0x3a2a1a));
+    const beardMesh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(hairC));
     beardMesh.scale.set(1.25, 0.7, 0.7);
     beardMesh.position.set(0, 1.21, 0.11);
     g.add(beardMesh);
@@ -213,27 +211,27 @@ function makeVillager(rnd: () => number): THREE.Group {
   palmR.position.y = -0.42;
   armR.add(palmR);
 
-  // 腿
-  const legL = limb(0.065, 0.055, 0.4, pantsC);
+  // 腿（女性用肤色，男性用裤色，与原型 female ? skin : pants 一致）
+  const legL = limb(0.065, 0.055, 0.4, female ? skinC : pantsC);
   legL.position.set(-0.09, 0.62, 0);
   g.add(legL);
-  const legR = limb(0.065, 0.055, 0.4, pantsC);
+  const legR = limb(0.065, 0.055, 0.4, female ? skinC : pantsC);
   legR.position.set(0.09, 0.62, 0);
   g.add(legR);
 
-  // 老人：拐杖
+  // 老人：拐杖（颜色 0x6f5a3e 与原型一致）
   if (age === 'elder') {
     const cane = new THREE.Mesh(
       new THREE.CylinderGeometry(0.025, 0.025, 0.78, 6),
-      mat(0x7a6030)
+      mat(0x6f5a3e)
     );
     cane.position.set(0.3, 0.4, 0.12);
     g.add(cane);
   }
 
-  // 帽子
+  // 帽子（草帽颜色 0xd9c58a 与原型一致）
   if (hatR === 1) {
-    const straw = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.15, 9), mat(0xd4b86a));
+    const straw = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.15, 9), mat(0xd9c58a));
     straw.position.y = 1.52;
     g.add(straw);
   } else if (hatR === 2 && hatColor !== null) {
@@ -242,9 +240,9 @@ function makeVillager(rnd: () => number): THREE.Group {
     g.add(cap);
   }
 
-  // 背篓
+  // 背篓（颜色 0xa87c4f 与原型一致）
   if (basket) {
-    const bask = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.14), mat(0x8a7050));
+    const bask = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.14), mat(0xa87c4f));
     bask.position.set(0, 0.95, -0.22);
     g.add(bask);
   }

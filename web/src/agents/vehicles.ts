@@ -127,7 +127,8 @@ function makeTrainUnit(isEngine: boolean, color: number): THREE.Group {
   g.add(body);
 
   if (isEngine) {
-    const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.9, 10), mat(color));
+    // nose 颜色硬编码 0x3a4048，不随车身主色（与原型一致）
+    const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.9, 10), mat(0x3a4048));
     nose.rotation.x = Math.PI / 2;
     nose.position.set(0, 0.55, 1.2);
     g.add(nose);
