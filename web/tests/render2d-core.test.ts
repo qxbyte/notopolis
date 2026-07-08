@@ -276,18 +276,26 @@ describe('WorldCanvas — paint setTransform 参数', () => {
     const pxPerUnit = 8;
     const wc = createWorldCanvas(bounds, pxPerUnit);
 
-    // paint 前，worldcanvas 已对 tile ctx 调用了 setTransform
-    // 通过 tileBounds 验证第一个 tile 的世界坐标范围
-    let firstTileBounds: { minX: number; minZ: number; maxX: number; maxZ: number } | null = null;
-    wc.paint((_ctx, tileBounds) => {
-      if (firstTileBounds === null) {
-        firstTileBounds = tileBounds;
+    // paint 回调收到的 ctx 就是 tile 内部的 mock ctx
+    // worldcanvas 在调用 fn 之前已对 ctx 调用了 setTransform
+    // 通过 _setTransformCalls 验证参数是否正确
+    let firstSetTransformCall: { a: number; b: number; c: number; d: number; e: number; f: number } | null = null;
+    wc.paint((ctx) => {
+      if (firstSetTransformCall === null) {
+        const calls = (ctx as unknown as { _setTransformCalls: typeof firstSetTransformCall[] })._setTransformCalls;
+        if (calls && calls.length > 0) {
+          firstSetTransformCall = calls[calls.length - 1];
+        }
       }
     });
 
-    expect(firstTileBounds).not.toBeNull();
-    expect(firstTileBounds!.minX).toBe(0);
-    expect(firstTileBounds!.minZ).toBe(0);
+    expect(firstSetTransformCall).not.toBeNull();
+    expect(firstSetTransformCall!.a).toBe(pxPerUnit);            // 8
+    expect(firstSetTransformCall!.b).toBe(0);
+    expect(firstSetTransformCall!.c).toBe(0);
+    expect(firstSetTransformCall!.d).toBe(pxPerUnit);            // 8
+    expect(firstSetTransformCall!.e).toBeCloseTo(0, 10);         // -minX * pxPerUnit = 0
+    expect(firstSetTransformCall!.f).toBeCloseTo(0, 10);         // -minZ * pxPerUnit = 0
   });
 });
 
