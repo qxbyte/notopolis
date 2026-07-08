@@ -473,13 +473,12 @@ export function updateBuildings(result: BuildingsResult, t: number): void {
 
   // smokes 上升消散
   for (const s of result.smokes) {
-    for (let i = 0; i < s.puffs.length; i++) {
-      const phase = (t * 0.4 + s.seed + i * 0.7) % 1;
-      s.puffs[i].position.y = s.base.y + phase * 2.2;
-      (s.puffs[i].material as THREE.MeshLambertMaterial).opacity = 0.7 * (1 - phase);
-      const sc = 0.8 + phase * 1.1;
-      s.puffs[i].scale.set(sc, sc, sc);
-    }
+    s.puffs.forEach((p, i) => {
+      const ph = ((t * 0.4 + s.seed + i * 0.33) % 1);
+      p.position.set(s.base.x + Math.sin(t + i) * 0.15 * ph, s.base.y + 0.4 + ph * 1.8, s.base.z);
+      p.scale.setScalar(0.5 + ph * 1.1);
+      (p.material as THREE.MeshLambertMaterial).opacity = 0.55 * (1 - ph);
+    });
   }
 
   // windmills 旋转

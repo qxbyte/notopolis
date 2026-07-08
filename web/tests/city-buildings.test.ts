@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import type { Building, CityModel } from '@shared/types';
-import { buildBuildings, updateBuildings } from '../src/city/buildings';
+import { buildBuildings, updateBuildings, type SmokePuff } from '../src/city/buildings';
 
 // --------------------------------------------------------------------------
 // fixture
@@ -267,5 +267,64 @@ describe('updateBuildings', () => {
       updateBuildings(result, 0.5);
       updateBuildings(result, 10);
     }).not.toThrow();
+  });
+});
+
+// --------------------------------------------------------------------------
+// 9. smoke 动画公式对齐原型（四处修正）
+// --------------------------------------------------------------------------
+
+describe('updateBuildings — smoke animation formulas', () => {
+  it('phase 步长 i*0.33，position 含 sin(t+i)*0.15*ph 横漂与 +0.4 y 偏置，z 固定 base.z，opacity 0.55，scale 起点 0.5', () => {
+    // 手工构造一个含 1 个 smoke（3 puffs）的 result
+    const result: ReturnType<typeof buildBuildings> = {
+      pickables: [],
+      glowWindows: [],
+      smokes: [],
+      windmills: [],
+    };
+
+    // 创建 3 个 puff mesh
+    const basePos = new THREE.Vector3(5, 10, 3);
+    const seed = 3.14;
+    const puffs: THREE.Mesh[] = [];
+    for (let i = 0; i < 3; i++) {
+      const p = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 6, 5),
+        new THREE.MeshLambertMaterial({ color: 0xdedede, transparent: true, opacity: 0.7 })
+      );
+      p.position.copy(basePos);
+      puffs.push(p);
+    }
+    result.smokes.push({ puffs, base: basePos.clone(), seed });
+
+    // 调用 updateBuildings(result, t=1)
+    const t = 1;
+    updateBuildings(result, t);
+
+    const smoke = result.smokes[0];
+    const puff0 = smoke.puffs[0];
+
+    // 计算预期 phase（i=0）
+    const expectedPhase = ((t * 0.4 + seed + 0 * 0.33) % 1);
+
+    // 断言 position.x === base.x + Math.sin(1+0) * 0.15 * expectedPhase
+    const expectedX = smoke.base.x + Math.sin(t + 0) * 0.15 * expectedPhase;
+    expect(puff0.position.x).toBeCloseTo(expectedX, 5);
+
+    // 断言 position.y === base.y + 0.4 + expectedPhase * 1.8
+    const expectedY = smoke.base.y + 0.4 + expectedPhase * 1.8;
+    expect(puff0.position.y).toBeCloseTo(expectedY, 5);
+
+    // 断言 position.z === base.z（固定不变）
+    expect(puff0.position.z).toBeCloseTo(smoke.base.z, 5);
+
+    // 断言 scale.x === 0.5 + expectedPhase * 1.1
+    const expectedScale = 0.5 + expectedPhase * 1.1;
+    expect(puff0.scale.x).toBeCloseTo(expectedScale, 5);
+
+    // 断言 opacity === 0.55 * (1 - expectedPhase)
+    const expectedOpacity = 0.55 * (1 - expectedPhase);
+    expect((puff0.material as THREE.MeshLambertMaterial).opacity).toBeCloseTo(expectedOpacity, 5);
   });
 });
