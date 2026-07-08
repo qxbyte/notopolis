@@ -209,10 +209,6 @@ function buildShrubs(
   cz: number,
   wsPrefix: string
 ): void {
-  const rnd = rng0(wsPrefix + ':deco:' + d.dir);
-  // 跳过前几个 rnd() 调用以与 pond 采样保持一致
-  // 注意：此函数与 buildPond 使用相同的 rnd 种子，但 buildPond 已消耗了一些随机数
-  // 为了正确性，灌木使用独立种子
   const rndS = rng0(wsPrefix + ':shrub:' + d.dir);
 
   const nB = 3 + Math.floor(rndS() * 4);

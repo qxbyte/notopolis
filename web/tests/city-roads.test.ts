@@ -50,10 +50,10 @@ describe('prepareRoads — street 蜿蜒化', () => {
   it('street 端点约等于原始端点（误差 < 0.01）', () => {
     const roads = prepareRoads(city, 0, 0);
     const pts = roads[0].pts;
-    expect(pts[0][0]).toBeCloseTo(0, 1);
-    expect(pts[0][1]).toBeCloseTo(0, 1);
-    expect(pts[18][0]).toBeCloseTo(20, 1);
-    expect(pts[18][1]).toBeCloseTo(0, 1);
+    expect(pts[0][0]).toBeCloseTo(0, 2);
+    expect(pts[0][1]).toBeCloseTo(0, 2);
+    expect(pts[18][0]).toBeCloseTo(20, 2);
+    expect(pts[18][1]).toBeCloseTo(0, 2);
   });
 
   it('lens.length === pts.length - 1，total > 0', () => {

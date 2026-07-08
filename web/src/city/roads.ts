@@ -117,10 +117,8 @@ export function computeTrafficLights(roads: RoadWithPts[]): TrafficLight[] {
         mats: null,
       };
       trafficLights.push(light);
-      if (!mr.stops) mr.stops = [];
-      if (!ar.stops) ar.stops = [];
-      mr.stops.push({ s: hit[2], light, axis: 'main' });
-      ar.stops.push({ s: hit[3], light, axis: 'avenue' });
+      mr.stops!.push({ s: hit[2], light, axis: 'main' });
+      ar.stops!.push({ s: hit[3], light, axis: 'avenue' });
     }
   }
 
