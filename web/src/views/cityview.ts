@@ -70,6 +70,7 @@ export function showCity(
 
   // ---- 3. 世界参数 ----
   const p = worldParams(vault.path, cityHalfW, cityHalfD, worldR, T);
+  const WS = 'world:' + vault.path;
 
   // ---- 4. 地形 ----
   buildTerrain(sceneProxy, p);
@@ -78,7 +79,7 @@ export function showCity(
   const roads = prepareRoads(city, cx, cz);
 
   // ---- 6. 区块 ----
-  const { plates, idleSpots } = buildDistricts(sceneProxy, city, cx, cz, vault.path);
+  const { plates, idleSpots } = buildDistricts(sceneProxy, city, cx, cz, WS);
 
   // ---- 7. 道路网格 ----
   buildRoadMeshes(sceneProxy, roads, cx, cz);
@@ -92,15 +93,15 @@ export function showCity(
   buildBridges(sceneProxy, p, roads, cx, cz);
 
   // ---- 10. 植被 & 云 ----
-  buildWilds(sceneProxy, p, vault.path);
-  const clouds = buildClouds(sceneProxy, p, vault.path);
+  buildWilds(sceneProxy, p, WS);
+  const clouds = buildClouds(sceneProxy, p, WS);
 
   // ---- 11. 建筑 ----
   const buildResult = buildBuildings(sceneProxy, city, cx, cz, Date.now());
 
   // ---- 12. 市民 ----
   const citizens = spawnCitizens(sceneProxy, {
-    wsPrefix: vault.path,
+    wsPrefix: WS,
     activeCount7d: city.activeCount7d,
     walkables: roads,
     idleSpots,

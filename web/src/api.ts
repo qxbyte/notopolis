@@ -88,6 +88,7 @@ export function connectWS(onCityUpdated: (vaultId: string) => void): () => void 
 
     const scheduleReconnect = () => {
       if (closed) return;
+      if (reconnectTimer !== null) return;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect();

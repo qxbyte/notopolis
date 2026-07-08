@@ -305,4 +305,33 @@ describe('connectWS', () => {
 
     dispose();
   });
+
+  it('creates exactly ONE new instance when simulateError() + simulateClose() fire back-to-back', () => {
+    const onCityUpdated = vi.fn();
+    const dispose = connectWS(onCityUpdated);
+
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const ws = FakeWebSocket.instances[0];
+
+    // Simulate browser firing onerror then onclose in sequence (no timer advancement yet).
+    // onerror fires scheduleReconnect: sets timer1 at delay=1000ms, delay advances to 2000.
+    // onclose fires scheduleReconnect: sets timer2 at delay=2000ms, delay advances to 4000.
+    // Without the guard, timer1 handle is overwritten and leaked — both fire eventually.
+    ws.simulateError();
+    ws.simulateClose();
+
+    // Before any timer fires: still only the original instance
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    // After 1000ms: timer1 fires → one reconnect (instance 2)
+    vi.advanceTimersByTime(1000);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    // After another 1000ms (total 2000ms): without guard, leaked timer2 fires → spurious
+    // third instance. With the guard, timer2 was never scheduled, so no new instance.
+    vi.advanceTimersByTime(1000);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    dispose();
+  });
 });

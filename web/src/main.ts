@@ -23,7 +23,7 @@ const __notopolis: {
 } = {
   view: 'onboarding',
   pickables: 0,
-  enterCity: (_vaultId: string) => { /* 初始化前无操作 */ },
+  enterCity,
   pickBuilding: (_index: number) => { /* 初始化前无操作 */ },
 };
 (window as any).__notopolis = __notopolis;
@@ -32,6 +32,12 @@ function clearCurrent(): void {
   current?.dispose();
   current = null;
   currentVaultId = null;
+}
+
+async function enterCity(vaultId: string): Promise<void> {
+  const { vaults } = await fetchWorld();
+  const vault = vaults.find((v) => v.id === vaultId);
+  if (vault) await goCity(vault);
 }
 
 async function goWorldMap(): Promise<void> {
@@ -44,11 +50,6 @@ async function goWorldMap(): Promise<void> {
     __notopolis.view = 'worldmap';
     __notopolis.pickables = 0;
     __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
-    __notopolis.enterCity = async (vaultId: string) => {
-      const { vaults: allVaults } = await fetchWorld();
-      const vault = allVaults.find((v) => v.id === vaultId);
-      if (vault) await goCity(vault);
-    };
   } finally {
     navigating = false;
   }
@@ -66,11 +67,6 @@ async function goCity(vault: WorldVault): Promise<void> {
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
     __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
-    __notopolis.enterCity = async (vaultId: string) => {
-      const { vaults: allVaults } = await fetchWorld();
-      const v = allVaults.find((x) => x.id === vaultId);
-      if (v) await goCity(v);
-    };
   } finally {
     navigating = false;
   }

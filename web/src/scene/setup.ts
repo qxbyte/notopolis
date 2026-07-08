@@ -4,7 +4,6 @@ export { SoftBox } from './softbox'
 export function createScene(container: HTMLElement): {
   scene: THREE.Scene
   renderer: THREE.WebGLRenderer
-  startLoop: (cb: (t: number) => void) => void
 } {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -31,13 +30,5 @@ export function createScene(container: HTMLElement): {
     renderer.setSize(container.clientWidth, container.clientHeight)
   })
 
-  function startLoop(cb: (t: number) => void): void {
-    function animate(t: number) {
-      requestAnimationFrame(animate)
-      cb(t)
-    }
-    requestAnimationFrame(animate)
-  }
-
-  return { scene, renderer, startLoop }
+  return { scene, renderer }
 }
