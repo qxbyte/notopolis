@@ -7,7 +7,7 @@
 
 import { rng0 } from '../util/seed';
 import { fbm } from '../util/noise';
-import { polyDist, lakeShapeR } from '../util/poly';
+import { polyDist } from '../util/poly';
 
 export interface Lake {
   x: number;
@@ -134,9 +134,6 @@ export function worldParams(
     return y;
   });
   const canalEndY = canalY[canalY.length - 1];
-
-  // 注：lakeShapeR 来自 poly.ts，此处不重复实现
-  void lakeShapeR; // 确保 import 不被 tree-shake（terrain.ts 内联调用）
 
   return {
     RA, cosR, sinR,
