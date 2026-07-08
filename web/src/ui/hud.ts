@@ -10,6 +10,13 @@ export const TIER: Record<string, string> = {
   capital: '都城',
 };
 
+export const THEME_LABELS: Record<string, string> = {
+  plains: '平原王城',
+  mountain: '山地雄关',
+  harbor: '海港商邦',
+  snow: '雪原孤城',
+};
+
 export interface HUDHandle {
   setStats(text: string): void;
   setTip(text: string): void;

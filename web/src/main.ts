@@ -1,38 +1,55 @@
-import * as THREE from 'three'
-import { createScene } from './scene/setup'
+import './ui/style.css';
+import { fetchWorld, fetchCity, connectWS } from './api';
+import type { WorldVault } from './api';
+import { createScene } from './scene/setup';
+import { showOnboarding } from './ui/onboarding';
+import { showWorldMap } from './views/worldmap';
+import { showCity } from './views/cityview';
 
-const container = document.getElementById('app') as HTMLElement
-const { scene, renderer, startLoop } = createScene(container)
+const container = document.getElementById('app') as HTMLElement;
+const { scene, renderer } = createScene(container);
 
-// 相机（F8 再抽出）
-const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 2000)
-camera.position.set(8, 6, 8)
-camera.lookAt(0, 0, 0)
+let current: { dispose(): void } | null = null;
+let currentVaultId: string | null = null;
 
-window.addEventListener('resize', () => {
-  camera.aspect = container.clientWidth / container.clientHeight
-  camera.updateProjectionMatrix()
-})
+function clearCurrent(): void {
+  current?.dispose();
+  current = null;
+  currentVaultId = null;
+}
 
-// 测试用圆角盒（BoxGeometry 已被 SoftBox 替换）
-const box = new THREE.Mesh(
-  new THREE.BoxGeometry(2, 2, 2),
-  new THREE.MeshLambertMaterial({ color: 0xc0453a })
-)
-box.castShadow = true
-scene.add(box)
+async function goWorldMap(): Promise<void> {
+  clearCurrent();
+  const { vaults } = await fetchWorld();
+  current = showWorldMap({ scene, renderer, container }, vaults, goCity);
+}
 
-// 地面平面
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshLambertMaterial({ color: 0x5a8a3f })
-)
-ground.rotation.x = -Math.PI / 2
-ground.receiveShadow = true
-scene.add(ground)
+async function goCity(vault: WorldVault): Promise<void> {
+  clearCurrent();
+  currentVaultId = vault.id;
+  const city = await fetchCity(vault.id);
+  current = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+}
 
-// 渲染循环
-startLoop((t) => {
-  box.rotation.y = t * 0.0003
-  renderer.render(scene, camera)
-})
+async function init(): Promise<void> {
+  const { vaults } = await fetchWorld();
+  if (vaults.length === 0) {
+    showOnboarding(container, goWorldMap);
+  } else {
+    await goWorldMap();
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') goWorldMap();
+});
+
+connectWS(async (vaultId: string) => {
+  if (currentVaultId === vaultId) {
+    const { vaults } = await fetchWorld();
+    const vault = vaults.find((v) => v.id === vaultId);
+    if (vault) await goCity(vault);
+  }
+});
+
+init();
