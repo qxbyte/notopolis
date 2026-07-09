@@ -21,6 +21,8 @@ import {
 } from './sketch';
 import { rng0, hashStr } from '../util/seed';
 import { getBiome } from './biomes';
+import { buildTransport, TransportNet } from './transport';
+import { polyDist } from '../util/poly';
 
 /* ------------------------------------------------------------------ */
 /* Helper: 线性插值 hex 颜色（分 R/G/B 通道）                           */
@@ -1507,6 +1509,488 @@ function paintExtras(
 }
 
 /* ------------------------------------------------------------------ */
+/* 层 5.5 — 跨区交通网                                                  */
+/* ------------------------------------------------------------------ */
+
+function paintTransport(
+  ctx: CanvasRenderingContext2D,
+  transport: TransportNet,
+  params: WorldParams,
+  wsPrefix: string,
+): void {
+  const rng = rng0(wsPrefix + ':transport');
+
+  for (const edge of transport.rails) {
+    const { pts, total } = edge;
+    if (pts.length < 2) continue;
+
+    // 路基（strokeStyle '#b0a898'，lineWidth 0.6）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#b0a898';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.6;
+    wobblyPath(ctx, rng, pts, 0.5);
+    ctx.stroke();
+
+    // 双轨（平行线 offset ±0.25）
+    const leftPts = offsetPolyline(pts as ReadonlyArray<readonly [number, number]>, 0.25);
+    const rightPts = offsetPolyline(pts as ReadonlyArray<readonly [number, number]>, -0.25);
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    wobblyPath(ctx, rng, leftPts, 0.3);
+    ctx.stroke();
+    wobblyPath(ctx, rng, rightPts, 0.3);
+    ctx.stroke();
+
+    // 枕木：每 1.2 世界单位一根短横线
+    if (total > 0) {
+      const sleepersCount = Math.floor(total / 1.2);
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = '#7a6858';
+      // 估算每段中点位置来画枕木
+      let cumLen = 0;
+      for (let si = 0; si < pts.length - 1; si++) {
+        const segLen = edge.lens[si] ?? 0;
+        const segCount = Math.floor(segLen / 1.2);
+        const [ax, az] = pts[si];
+        const [bx, bz] = pts[si + 1];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const len = Math.hypot(dx, dz) || 1;
+        const nx = -dz / len;
+        const nz = dx / len;
+        for (let ti = 0; ti < segCount; ti++) {
+          const t = (ti + 0.5) / segCount;
+          const px = ax + dx * t;
+          const pz = az + dz * t;
+          ctx.beginPath();
+          ctx.moveTo(px + nx * 0.5, pz + nz * 0.5);
+          ctx.lineTo(px - nx * 0.5, pz - nz * 0.5);
+          ctx.stroke();
+        }
+        cumLen += segLen;
+      }
+      void sleepersCount; void cumLen;
+    }
+
+    // bridge 区间
+    for (const [s1, s2] of edge.bridges) {
+      const bStart = Math.floor(s1 * (pts.length - 1));
+      const bEnd = Math.ceil(s2 * (pts.length - 1));
+      const bridgePts = pts.slice(Math.max(0, bStart), Math.min(pts.length, bEnd + 1));
+      if (bridgePts.length < 2) continue;
+
+      // 桥板
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#8a7055';
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+      ctx.beginPath();
+      const leftBridge = offsetPolyline(bridgePts as ReadonlyArray<readonly [number, number]>, 1);
+      const rightBridge = offsetPolyline(bridgePts as ReadonlyArray<readonly [number, number]>, -1);
+      ctx.moveTo(leftBridge[0][0], leftBridge[0][1]);
+      for (const p of leftBridge) ctx.lineTo(p[0], p[1]);
+      for (let i = rightBridge.length - 1; i >= 0; i--) ctx.lineTo(rightBridge[i][0], rightBridge[i][1]);
+      ctx.closePath();
+      ctx.fill();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+      // 两侧短柱线（每 2 单位一对）
+      (ctx as unknown as Record<string, unknown>).strokeStyle = '#6a5040';
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+      const bridgeLen = bridgePts.reduce((acc, _, i) => {
+        if (i === 0) return 0;
+        return acc + Math.hypot(bridgePts[i][0] - bridgePts[i - 1][0], bridgePts[i][1] - bridgePts[i - 1][1]);
+      }, 0);
+      const pillarCount = Math.floor(bridgeLen / 2);
+      for (let pi = 0; pi < pillarCount; pi++) {
+        const t = (pi + 0.5) / Math.max(1, pillarCount);
+        const idx = Math.min(bridgePts.length - 2, Math.floor(t * (bridgePts.length - 1)));
+        const [px, pz] = bridgePts[idx];
+        const [nx2, nz2] = (() => {
+          const [ax, az] = bridgePts[idx];
+          const [bx, bz] = bridgePts[idx + 1];
+          const dx = bx - ax;
+          const dz = bz - az;
+          const l = Math.hypot(dx, dz) || 1;
+          return [-dz / l, dx / l];
+        })();
+        ctx.beginPath();
+        ctx.moveTo(px + nx2 * 1, pz + nz2 * 1);
+        ctx.lineTo(px + nx2 * 1, pz + nz2 * 1 + 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px - nx2 * 1, pz - nz2 * 1);
+        ctx.lineTo(px - nx2 * 1, pz - nz2 * 1 + 0.5);
+        ctx.stroke();
+      }
+    }
+
+    // tunnel 区间（画洞口）
+    for (const [s1, s2] of edge.tunnels) {
+      // 隧道口：在 s1/s2 两处
+      for (const s of [s1, s2]) {
+        const idx = Math.round(s * (pts.length - 1));
+        const ptIdx = Math.max(0, Math.min(pts.length - 1, idx));
+        const [tx, tz] = pts[ptIdx];
+
+        // 取方向
+        const dirIdx = ptIdx === pts.length - 1 ? ptIdx - 1 : ptIdx;
+        const [ax, az] = pts[dirIdx];
+        const [bx, bz] = pts[Math.min(pts.length - 1, dirIdx + 1)];
+        const dxd = bx - ax, dzd = bz - az;
+        const dlen = Math.hypot(dxd, dzd) || 1;
+        const nx = -dzd / dlen;
+        const nz = dxd / dlen;
+
+        // 洞口黑填充（小扇形）
+        (ctx as unknown as Record<string, unknown>).fillStyle = '#1a1814';
+        ctx.beginPath();
+        ctx.moveTo(tx, tz);
+        ctx.lineTo(tx + nx * 1.2, tz + nz * 1.2);
+        ctx.arc(tx, tz, 1.2, Math.atan2(nz, nx), Math.atan2(-nz, -nx), false);
+        ctx.closePath();
+        ctx.fill();
+
+        // 拱圈线
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.3;
+        ctx.beginPath();
+        ctx.arc(tx, tz, 1.2, Math.atan2(nz, nx), Math.atan2(-nz, -nx), false);
+        ctx.stroke();
+
+        // 拱圈装饰（globalAlpha 0.5）
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+        ctx.beginPath();
+        ctx.arc(tx, tz, 0.8, Math.atan2(nz, nx), Math.atan2(-nz, -nx), false);
+        ctx.stroke();
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      }
+
+      // 山体表面虚线（隧道段）
+      const tStart = Math.floor(s1 * (pts.length - 1));
+      const tEnd = Math.ceil(s2 * (pts.length - 1));
+      const tunnelPts = pts.slice(Math.max(0, tStart), Math.min(pts.length, tEnd + 1));
+      if (tunnelPts.length >= 2) {
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.3;
+        dashedPath(ctx, tunnelPts, [2, 3]);
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      }
+    }
+  }
+
+  // 车站
+  for (const station of transport.stations) {
+    const stRng = rng0(wsPrefix + ':station:' + station.districtDir);
+    // 站台：wobblyRect 3×1.5
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#f0e8d0';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    wobblyRect(ctx, stRng, station.x - 1.5, station.z - 0.75, 3, 1.5, 0.5);
+    ctx.fill();
+    wobblyRect(ctx, stRng, station.x - 1.5, station.z - 0.75, 3, 1.5, 0.5);
+    ctx.stroke();
+
+    // 顶棚线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    ctx.beginPath();
+    ctx.moveTo(station.x - 1.2, station.z - 0.45);
+    ctx.lineTo(station.x + 1.2, station.z - 0.45);
+    ctx.stroke();
+  }
+
+  // 机场
+  const { airport } = transport;
+  if (airport) {
+    const apRng = rng0(wsPrefix + ':airport:draw');
+    const { x: apx, z: apz, ang, len } = airport;
+
+    ctx.save();
+    ctx.translate(apx, apz);
+    ctx.rotate(ang);
+
+    // 跑道 wobblyRect
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#d8d4c8';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    wobblyRect(ctx, apRng, -len / 2, -2, len, 4, 0.5);
+    ctx.fill();
+    wobblyRect(ctx, apRng, -len / 2, -2, len, 4, 0.5);
+    ctx.stroke();
+
+    // 中线虚线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    dashedPath(ctx, [[-len / 2 + 2, 0], [len / 2 - 2, 0]], [4, 3]);
+
+    // 端带 hatch
+    hatchRect(ctx, apRng, -len / 2, -2, 4, 4, 3, PAPER.inkFaded);
+    hatchRect(ctx, apRng, len / 2 - 4, -2, 4, 4, 3, PAPER.inkFaded);
+
+    // 小塔台 2×4（右侧）
+    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.paper;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    wobblyRect(ctx, apRng, len / 2 - 2, -4, 2, 4, 0.3);
+    ctx.fill();
+    wobblyRect(ctx, apRng, len / 2 - 2, -4, 2, 4, 0.3);
+    ctx.stroke();
+
+    // 顶部控制室（小方块）
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#c8dce0';
+    wobblyRect(ctx, apRng, len / 2 - 2.5, -5, 3, 1.5, 0.2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 停机飞机涂鸦（跑道侧）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    const planeX = -6;
+    const planeZ = -5;
+    // 机身
+    ctx.beginPath();
+    ctx.moveTo(planeX - 2, planeZ);
+    ctx.lineTo(planeX + 2, planeZ);
+    ctx.stroke();
+    // 机翼
+    ctx.beginPath();
+    ctx.moveTo(planeX - 0.5, planeZ);
+    ctx.lineTo(planeX - 0.5, planeZ - 1.5);
+    ctx.moveTo(planeX - 0.5, planeZ);
+    ctx.lineTo(planeX - 0.5, planeZ + 1.5);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // 轮渡
+  const { ferry } = transport;
+  if (ferry) {
+    const frRng = rng0(wsPrefix + ':ferry:draw');
+    // 两端渡口小栈板
+    for (const dock of ferry.docks) {
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#9a7a5e';
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+      wobblyRect(ctx, frRng, dock.x - 0.75, dock.z - 1.5, 1.5, 3, 0.3);
+      ctx.fill();
+      wobblyRect(ctx, frRng, dock.x - 0.75, dock.z - 1.5, 1.5, 3, 0.3);
+      ctx.stroke();
+    }
+
+    // 航线虚线
+    if (ferry.route.length >= 2) {
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.water;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+      dashedPath(ctx, ferry.route, [4, 5]);
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    }
+  }
+
+  void params;
+  void wsPrefix;
+}
+
+/* ------------------------------------------------------------------ */
+/* 层 6.5 — 旷野填充                                                    */
+/* ------------------------------------------------------------------ */
+
+function paintWilderness(
+  ctx: CanvasRenderingContext2D,
+  city: CityModel,
+  params: WorldParams,
+  transport: TransportNet,
+  wsPrefix: string,
+): void {
+  const rng = rng0(wsPrefix + ':wild');
+  const { T, riverDist, RIVER_W } = params;
+  const theme = city.theme;
+  const biome = getBiome(theme);
+
+  const isSnow = theme === 'snow';
+  const isMountain = theme === 'mountain';
+  const isHarbor = theme === 'harbor';
+
+  // 候选点生成：80 个
+  const candidates: [number, number][] = [];
+  for (let i = 0; i < 80; i++) {
+    const x = (rng() * 2 - 1) * T * 0.9;
+    const z = (rng() * 2 - 1) * T * 0.9;
+
+    // 离区团块 > 8
+    let tooClose = false;
+    for (const d of city.districts) {
+      if (d.polygon.length >= 2) {
+        const pd = polyDist(x, z, d.polygon);
+        if (pd < 8) { tooClose = true; break; }
+      }
+    }
+    if (tooClose) continue;
+
+    // 离水 > 8
+    if (params.waterStyle === 'sea' && params.seaData) {
+      if (params.seaData.coastDist(x, z) < 8) continue;
+    } else {
+      if (riverDist(x, z) < RIVER_W + 8) continue;
+    }
+
+    // 离铁路折线 > 4
+    let nearRail = false;
+    for (const edge of transport.rails) {
+      if (edge.pts.length >= 2) {
+        const pd = polyDist(x, z, edge.pts);
+        if (pd < 4) { nearRail = true; break; }
+      }
+    }
+    if (nearRail) continue;
+
+    // harbor：海岸方向留空（沙滩空旷）
+    if (isHarbor && params.seaData && params.seaData.coastDist(x, z) < 20) continue;
+
+    candidates.push([x, z]);
+  }
+
+  if (candidates.length === 0) return;
+
+  // 草甸色斑：5-10 个
+  const meadowCount = 5 + Math.floor(rng() * 6);
+  const meadowColor = isSnow ? '#dce8f0' : '#c8e098';
+  for (let i = 0; i < Math.min(meadowCount, candidates.length); i++) {
+    const [cx, cz] = candidates[i % candidates.length];
+    const r = 6 + rng() * 6;
+    (ctx as unknown as Record<string, unknown>).fillStyle = meadowColor;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.15;
+    scribbleBlob(ctx, rng, cx, cz, r);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+
+  // 森林块：4-8 片（snow 主题用三角松，普通用 scribbleBlob）
+  const forestPatchCount = Math.min(4 + Math.floor(rng() * 5), Math.max(0, candidates.length - meadowCount));
+  const forestDensity = isMountain ? 1.5 : 1.0;
+  const forestBlobColor = isMountain ? '#c0d8a0' : '#d4ecb0';
+
+  for (let fi = 0; fi < forestPatchCount; fi++) {
+    const candidateIdx = (meadowCount + fi) % candidates.length;
+    const [cx, cz] = candidates[candidateIdx];
+
+    // 底斑
+    const blobR = 8 + rng() * 6;
+    (ctx as unknown as Record<string, unknown>).fillStyle = forestBlobColor;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.25;
+    scribbleBlob(ctx, rng, cx, cz, blobR);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+    // 8-20 棵树
+    const treeCount = Math.round((8 + Math.floor(rng() * 13)) * forestDensity);
+    for (let ti = 0; ti < treeCount; ti++) {
+      const tx = cx + (rng() - 0.5) * blobR * 1.5;
+      const tz = cz + (rng() - 0.5) * blobR * 1.5;
+      const tr = 1.2 + rng() * 1.0;
+
+      if (isSnow) {
+        // snow：三角松
+        const h = tr * 2.2;
+        const trunkH = h * 0.4;
+        // 树干
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+        ctx.beginPath();
+        ctx.moveTo(tx, tz + trunkH * 0.5);
+        ctx.lineTo(tx, tz + trunkH);
+        ctx.stroke();
+        // 3 层三角形叶冠
+        for (let li = 0; li < 3; li++) {
+          const ly = tz - h * 0.7 + li * (h * 0.3);
+          const lw = h * 0.2 + li * h * 0.15;
+          (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+          (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
+          ctx.beginPath();
+          ctx.moveTo(tx, ly);
+          ctx.lineTo(tx - lw, ly + h * 0.25);
+          ctx.lineTo(tx + lw, ly + h * 0.25);
+          ctx.closePath();
+          ctx.fill();
+          // 雪帽
+          (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
+          (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(tx, ly);
+          ctx.lineTo(tx - h * 0.06, ly + h * 0.1);
+          ctx.lineTo(tx + h * 0.06, ly + h * 0.1);
+          ctx.closePath();
+          ctx.fill();
+          (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+        }
+      } else {
+        // 普通圆团树
+        (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
+        scribbleBlob(ctx, rng, tx, tz, tr);
+        ctx.fill();
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+        // 树干
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+        ctx.beginPath();
+        ctx.moveTo(tx, tz);
+        ctx.lineTo(tx, tz + 1.5 + rng() * 0.8);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 大公园：1-2 个
+  const parkCount = 1 + Math.floor(rng() * 2);
+  for (let pi = 0; pi < parkCount; pi++) {
+    if (candidates.length === 0) break;
+    const candidateIdx = (meadowCount + forestPatchCount + pi) % candidates.length;
+    const [cx, cz] = candidates[candidateIdx];
+
+    // 草地底
+    const grassR = 12 + rng() * 6;
+    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.2;
+    scribbleBlob(ctx, rng, cx, cz, grassR);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+    // 环形小径
+    const pathR = 5 + rng() * 3;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    wobblyCircle(ctx, rng, cx, cz, pathR, 0.08);
+    ctx.stroke();
+
+    // 池塘
+    const pondR = 2 + rng() * 1;
+    const pondColor = isSnow ? '#ccdce8' : PAPER.water;
+    (ctx as unknown as Record<string, unknown>).fillStyle = pondColor;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
+    wobblyCircle(ctx, rng, cx, cz, pondR, 0.12);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+    // 长椅两笔
+    const benchOff = pathR * 0.6;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+    ctx.beginPath();
+    ctx.moveTo(cx - 1.5, cz + benchOff);
+    ctx.lineTo(cx + 1.5, cz + benchOff);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 1.5, cz + benchOff + 0.7);
+    ctx.lineTo(cx + 1.5, cz + benchOff + 0.7);
+    ctx.stroke();
+  }
+
+  void biome;
+}
+
+/* ------------------------------------------------------------------ */
 /* 主函数（重构）                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -1529,6 +2013,9 @@ export function buildCityPainter(
   params: WorldParams,
   wsPrefix: string,
 ): CityPainter {
+  // 数据准备：构建交通网（纯数据，可缓存）
+  const transport = buildTransport(city, params, wsPrefix);
+
   // 构建 HitItem[]：先 district polygon，后 building circle
   const hitItems: HitItem[] = [];
 
@@ -1620,8 +2107,14 @@ export function buildCityPainter(
     // 层 5 — 道路（只画 main 和 avenue）
     paintRoads(ctx, city.roads, wsPrefix);
 
+    // 层 5.5 — 跨区交通网
+    paintTransport(ctx, transport, params, wsPrefix);
+
     // 层 6 — 公园/池塘
     paintParks(ctx, city.districts, wsPrefix);
+
+    // 层 6.5 — 旷野填充
+    paintWilderness(ctx, city, params, transport, wsPrefix);
 
     // 层 7 — 建筑
     paintBuildings(ctx, city.districts, wsPrefix);
