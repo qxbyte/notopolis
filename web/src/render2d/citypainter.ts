@@ -45,7 +45,7 @@ function lerpHex(a: string, b: string, t: number): string {
 /* Helper: 建筑占地半径                                                  */
 /* ------------------------------------------------------------------ */
 
-function footprintR(b: Building): number {
+export function footprintR(b: Building): number {
   return b.size === 1 ? 1.8 : b.size === 2 ? 2.3 : 2.8;
 }
 

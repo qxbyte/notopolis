@@ -5,7 +5,7 @@
 
 import { worldParams } from '../world/params';
 import { createWorldCanvas } from '../render2d/worldcanvas';
-import { paintCity, buildCityPainter } from '../render2d/citypainter';
+import { paintCity, buildCityPainter, footprintR } from '../render2d/citypainter';
 import type { CityPainter, CityPOI } from '../render2d/citypainter';
 import { createDynamicLayer } from '../render2d/dynamic';
 import { createCamera2D } from '../render2d/camera2d';
@@ -13,6 +13,8 @@ import { hitTest } from '../render2d/hit';
 import type { HitItem } from '../render2d/hit';
 import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
+import { createSearchUI } from '../ui/search';
+import { searchNotes, type SearchItem } from '../util/search';
 import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
@@ -36,6 +38,14 @@ export interface CityViewHandle {
   debugTrainPos(i: number): { x: number; z: number } | null;
   /** 飞机当前位置（调试用） */
   debugPlanePos(): { x: number; z: number; airborne: boolean } | null;
+  /** 镜头飞行动画（缓动到目标 center/zoom） */
+  flyTo(x: number, z: number, zoomPx: number, durMs?: number): void;
+  /** 按 notePath 拾取建筑并展示信息卡；命中返回 true */
+  pickByPath(notePath: string): boolean;
+  /** 打开搜索浮层 */
+  openSearch(): void;
+  /** 搜索命中（调试/测试用） */
+  search(query: string): { notePath: string; title: string; dir: string; score: number }[];
 }
 
 export function showCity2D(
@@ -106,6 +116,12 @@ export function showCity2D(
   const paintStart = performance.now();
   const painter: CityPainter = buildCityPainter(city, params, wsPrefix, expandedBounds);
   const hitItems: HitItem[] = painter.hitItems;
+
+  // 建筑扁平索引：notePath → { 建筑, 区名 }（搜索/定位/链接漫游共用）
+  const buildingIndex = new Map<string, { b: import('@shared/types').Building; dir: string }>();
+  for (const d of city.districts) {
+    for (const b of d.buildings) buildingIndex.set(b.notePath, { b, dir: d.dir });
+  }
   // 低分辨率离屏 blit（8ppu 质量，交互流畅用）
   world.paint((ctx) => painter.drawStatic(ctx));
   const paintMs = Math.round((performance.now() - paintStart) * 10) / 10;
@@ -167,6 +183,33 @@ export function showCity2D(
   // 注册相机变化监听
   camera.onChange(scheduleSettle);
 
+  // ---- 9b. 镜头飞行动画 + 建筑高亮环（M0 基础设施）----
+  let camAnim: {
+    fromX: number; fromZ: number; fromZoom: number;
+    toX: number; toZ: number; toZoom: number;
+    startT: number; durMs: number;
+  } | null = null;
+
+  function flyTo(x: number, z: number, zoomPx: number, durMs = 600): void {
+    camAnim = {
+      fromX: camera.center.x, fromZ: camera.center.z, fromZoom: camera.zoom,
+      toX: x, toZ: z, toZoom: zoomPx, startT: performance.now(), durMs,
+    };
+  }
+
+  function cancelFly(): void {
+    camAnim = null;
+  }
+
+  let highlight: { x: number; z: number; r: number; startT: number } | null = null;
+  function highlightBuilding(b: import('@shared/types').Building): void {
+    highlight = { x: b.x, z: b.z, r: footprintR(b) + 1.5, startT: performance.now() };
+  }
+
+  // 用户主动操作（拖拽/缩放）立即取消飞行动画，避免与手动平移打架
+  canvas.addEventListener('mousedown', cancelFly);
+  canvas.addEventListener('wheel', cancelFly, { passive: true });
+
   // ---- 10. HUD + 返回按钮 ----
   const hud = createHUD(container);
   const tierLabel = TIER[city.tier] ?? city.tier;
@@ -193,6 +236,23 @@ export function showCity2D(
   // ---- 12. 信息卡 ----
   const cards = createCards(container);
 
+  // ---- 12b. 搜索（⌘K）----
+  const searchItems: SearchItem[] = [];
+  for (const { b, dir } of buildingIndex.values()) {
+    searchItems.push({ notePath: b.notePath, title: b.title, dir });
+  }
+  function decorate(path: string): string {
+    const hit = buildingIndex.get(path);
+    if (!hit) return '';
+    if (hit.b.isCivic) return '🏛 ';
+    if (hit.b.construction) return '🚧 ';
+    if (hit.b.landmark) return '⭐ ';
+    return '';
+  }
+  const searchUI = createSearchUI(container, searchItems, decorate, (notePath) => locate(notePath));
+
+  hud.addButton('🔍 搜索', () => searchUI.open());
+
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];
   let lastFrameT = 0;
@@ -202,6 +262,19 @@ export function showCity2D(
 
   function loop(t: number): void {
     animId = requestAnimationFrame(loop);
+
+    // 推进镜头飞行动画（在任何绘制之前更新相机）
+    if (camAnim) {
+      const raw = (performance.now() - camAnim.startT) / camAnim.durMs;
+      const p = raw < 0 ? 0 : raw > 1 ? 1 : raw;
+      const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+      camera.setView(
+        camAnim.fromX + (camAnim.toX - camAnim.fromX) * e,
+        camAnim.fromZ + (camAnim.toZ - camAnim.fromZ) * e,
+        camAnim.fromZoom + (camAnim.toZoom - camAnim.fromZoom) * e,
+      );
+      if (p >= 1) camAnim = null;
+    }
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -223,6 +296,28 @@ export function showCity2D(
 
     // 动态层在 camera transform 下以世界坐标绘制
     dynLayer.draw(ctx, t * 0.001);
+
+    // 建筑高亮环（每帧覆盖层，印章红双圈脉冲，持续 3 秒）
+    if (highlight) {
+      const el = (performance.now() - highlight.startT) / 1000;
+      if (el > 3) {
+        highlight = null;
+      } else {
+        const a = 1 - el / 3;
+        const pulse = 0.8 * Math.sin(el * 4) + 0.9;
+        const cc = ctx as unknown as Record<string, unknown>;
+        cc.strokeStyle = '#c0453a';
+        cc.globalAlpha = a;
+        cc.lineWidth = 0.35;
+        ctx.beginPath();
+        ctx.arc(highlight.x, highlight.z, highlight.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(highlight.x, highlight.z, highlight.r + pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        cc.globalAlpha = 1;
+      }
+    }
 
     ctx.restore();
 
@@ -251,6 +346,24 @@ export function showCity2D(
       const d = item.data as { type: 'district'; district: import('@shared/types').District };
       cards.showDistrict(d.district, Date.now());
     }
+  }
+
+  // 按 notePath 拾取建筑并展示信息卡（搜索/任务面板/链接漫游共用）
+  function pickByPath(notePath: string): boolean {
+    const hit = buildingIndex.get(notePath);
+    if (!hit) return false;
+    cards.showBuilding(hit.b, hit.dir, vault.path);
+    return true;
+  }
+
+  /** 定位到某建筑：飞行 + 高亮 + 展示卡片。命中返回 true。搜索/工地定位/漫步/链接漫游共用。 */
+  function locate(notePath: string, zoomPx = 14): boolean {
+    const hit = buildingIndex.get(notePath);
+    if (!hit) return false;
+    flyTo(hit.b.x, hit.b.z, zoomPx);
+    highlightBuilding(hit.b);
+    cards.showBuilding(hit.b, hit.dir, vault.path);
+    return true;
   }
 
   // ---- 16. Hover ----
@@ -294,6 +407,20 @@ export function showCity2D(
       camera.setView(x, z, zoomPx);
     },
 
+    flyTo(x: number, z: number, zoomPx: number, durMs?: number): void {
+      flyTo(x, z, zoomPx, durMs);
+    },
+
+    pickByPath,
+
+    openSearch(): void {
+      searchUI.open();
+    },
+
+    search(query: string) {
+      return searchNotes(query, searchItems);
+    },
+
     pois: painter.pois,
 
     debugPlanePos(): { x: number; z: number; airborne: boolean } | null {
@@ -332,12 +459,13 @@ export function showCity2D(
       }
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mousedown', cancelFly);
+      canvas.removeEventListener('wheel', cancelFly);
       window.removeEventListener('resize', onResize);
       camera.dispose();
       canvas.remove();
-      hud.root.remove();
-      const tip = container.querySelector('#tip');
-      if (tip) tip.remove();
+      searchUI.dispose();
+      hud.dispose();
       const card = container.querySelector('#card');
       if (card) card.remove();
       const label = container.querySelector('#label');

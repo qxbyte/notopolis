@@ -5,6 +5,7 @@ import { showHome, showOnboarding } from './ui/onboarding';
 import { showWorldMap2D } from './views/worldmap2d';
 import { showCity2D } from './views/cityview2d';
 import type { CityViewHandle } from './views/cityview2d';
+import { closeTopOverlay, clearOverlays } from './ui/overlaystack';
 
 // 保留 showOnboarding 引用避免 tree-shake 删掉（向后兼容）
 void showOnboarding;
@@ -41,6 +42,7 @@ function clearCurrent(): void {
   current?.dispose();
   current = null;
   currentVaultId = null;
+  clearOverlays();
 }
 
 async function enterCity(vaultId: string): Promise<void> {
@@ -87,8 +89,13 @@ async function goCity(vault: WorldVault): Promise<void> {
     __notopolis.perf = () => cityHandle.perf();
     __notopolis.centerOn = (x, z, zoomPx) => cityHandle.centerOn(x, z, zoomPx);
     __notopolis.pois = cityHandle.pois;
-    (__notopolis as Record<string, unknown>).debugTrainPos = (i: number) => cityHandle.debugTrainPos(i);
-    (__notopolis as Record<string, unknown>).debugPlanePos = () => cityHandle.debugPlanePos();
+    const dbg = __notopolis as Record<string, unknown>;
+    dbg.debugTrainPos = (i: number) => cityHandle.debugTrainPos(i);
+    dbg.debugPlanePos = () => cityHandle.debugPlanePos();
+    dbg.flyTo = (x: number, z: number, zoomPx: number, durMs?: number) => cityHandle.flyTo(x, z, zoomPx, durMs);
+    dbg.pickByPath = (p: string) => cityHandle.pickByPath(p);
+    dbg.openSearch = () => cityHandle.openSearch();
+    dbg.search = (q: string) => cityHandle.search(q);
   } finally {
     navigating = false;
   }
@@ -100,7 +107,17 @@ async function init(): Promise<void> {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && current) goWorldMap();
+  if (e.key === 'Escape') {
+    if (closeTopOverlay()) return; // 先关最上层浮层（搜索/面板）
+    if (current) goWorldMap();
+    return;
+  }
+  // ⌘K / Ctrl+K：城市视图下打开搜索
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && __notopolis.view === 'city') {
+    e.preventDefault();
+    const open = (__notopolis as Record<string, unknown>).openSearch;
+    if (typeof open === 'function') (open as () => void)();
+  }
 });
 
 connectWS(async (vaultId: string) => {

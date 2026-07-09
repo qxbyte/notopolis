@@ -4,6 +4,7 @@
  */
 
 import type { Building, District } from '@shared/types';
+import { obsidianUri } from './obsidian';
 
 /**
  * HTML 转义（4 字符：& < > "），同时导出供外部使用。
@@ -30,7 +31,7 @@ export function createCards(parent: HTMLElement): CardsHandle {
   return {
     showBuilding(b: Building, dir: string, vaultAbsPath: string): void {
       const date = new Date(b.mtimeMs).toLocaleDateString('zh-CN');
-      const uri = 'obsidian://open?path=' + encodeURIComponent(vaultAbsPath + '/' + b.notePath);
+      const uri = obsidianUri(vaultAbsPath, b.notePath);
       const prefix = b.isCivic ? '🏛 ' : b.landmark ? '⭐ ' : '';
       card.innerHTML = `
         <button class="close" onclick="this.parentElement.style.display='none'">✕</button>
