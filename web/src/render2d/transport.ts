@@ -304,9 +304,11 @@ function buildAirport(
   const { T, riverDist, RIVER_W, cosM, sinM, worldR } = params;
   const mountainThreshold = worldR * 0.5;
 
+  // 机场必须落在可平移地图内（expand ≈ worldR*0.55），不用满 T 范围
+  const AIRPORT_R = Math.min(T * 0.9, worldR * 1.3);
   for (let i = 0; i < 40; i++) {
-    const x = (rng() * 2 - 1) * T * 0.9;
-    const z = (rng() * 2 - 1) * T * 0.9;
+    const x = (rng() * 2 - 1) * AIRPORT_R;
+    const z = (rng() * 2 - 1) * AIRPORT_R;
 
     // 距离水检查
     if (riverDist(x, z) < RIVER_W + 10) continue;

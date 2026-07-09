@@ -34,6 +34,8 @@ export interface CityViewHandle {
   pois: { x: number; z: number; r: number; kind: string }[];
   /** 第 i 列火车当前车头位置（调试用） */
   debugTrainPos(i: number): { x: number; z: number } | null;
+  /** 飞机当前位置（调试用） */
+  debugPlanePos(): { x: number; z: number; airborne: boolean } | null;
 }
 
 export function showCity2D(
@@ -69,10 +71,11 @@ export function showCity2D(
   const cityHalfW = (maxX - minX) / 2;
   const cityHalfD = (maxZ - minZ) / 2;
   const worldR = Math.max(cityHalfW, cityHalfD) + 14;
-  const T = Math.max(320, worldR * 6);
+  // T 收缩到 2×worldR：城区（含区间荒野）占满全境地图，只留窄荒野边环
+  const T = Math.max(320, worldR * 2);
 
   // ---- 2. 扩展地图边界（含世界背景区域）----
-  const expand = Math.max(120, worldR * 2);
+  const expand = Math.max(80, worldR * 0.55);
   const expandedBounds = {
     minX: minX - expand,
     minZ: minZ - expand,
@@ -288,6 +291,9 @@ export function showCity2D(
 
     pois: painter.pois,
 
+    debugPlanePos(): { x: number; z: number; airborne: boolean } | null {
+      return dynLayer.debugPlanePos();
+    },
     debugTrainPos(i: number): { x: number; z: number } | null {
       return dynLayer.debugTrainPos(i);
     },

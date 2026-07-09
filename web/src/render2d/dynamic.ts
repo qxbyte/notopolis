@@ -90,6 +90,8 @@ export interface DynamicLayer {
   debugCitizenKinds(): CitizenKind[];
   /** 测试辅助：返回第 i 辆火车当前世界坐标，若不存在返回 null */
   debugTrainPos(i: number): { x: number; z: number } | null;
+  /** 测试辅助：返回飞机当前世界坐标与是否在空中（最近一次 draw 后更新） */
+  debugPlanePos(): { x: number; z: number; airborne: boolean } | null;
   /** 测试辅助：返回渡轮当前世界坐标，若不存在返回 null */
   debugFerryPos(): { x: number; z: number } | null;
   /** 测试辅助：返回帆船当前世界坐标（仅限最近一次 draw 后更新） */
@@ -540,49 +542,45 @@ function drawPlane(
   x: number,
   z: number,
   ang: number,
-  t: number,
-  worldR: number,
 ): void {
   ctx.save();
   ctx.translate(x, z);
   ctx.rotate(-ang);
 
-  // 机身
+  // 机身（白底填充 + 描边，比火柴人/汽车明显大一档才能在全景下看清）
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+  (ctx as unknown as Record<string, unknown>).fillStyle = '#f7f7f2';
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.35;
   ctx.beginPath();
-  ctx.moveTo(0, -1.2);
-  ctx.lineTo(0, 1.2);
+  ctx.ellipse(0, 0, 0.7, 3.0, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.stroke();
 
   // 机翼
   ctx.beginPath();
-  ctx.moveTo(-1.6, 0.2);
-  ctx.lineTo(1.6, 0.2);
+  ctx.moveTo(-4.0, 0.9);
+  ctx.lineTo(0, 0.1);
+  ctx.lineTo(4.0, 0.9);
+  ctx.lineTo(0, 1.3);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
 
   // 尾翼
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.1;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
   ctx.beginPath();
-  ctx.moveTo(-0.65, 0.9);
-  ctx.lineTo(0.65, 0.9);
+  ctx.moveTo(-1.6, 2.6);
+  ctx.lineTo(0, 2.1);
+  ctx.lineTo(1.6, 2.6);
   ctx.stroke();
 
-  ctx.restore();
+  // 机头小红点（涂鸦感）
+  (ctx as unknown as Record<string, unknown>).fillStyle = '#c0453a';
+  ctx.beginPath();
+  ctx.arc(0, -2.7, 0.35, 0, Math.PI * 2);
+  ctx.fill();
 
-  // 虚线尾迹弧（在世界坐标系中绘制）
-  const R = worldR * 1.6;
-  const a = t * 0.1;
-  const trailPts: [number, number][] = [];
-  for (let i = 0; i <= 12; i++) {
-    const aa = a - i * 0.06;
-    trailPts.push([Math.cos(aa) * R, Math.sin(aa) * R]);
-  }
-  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
-  dashedPath(ctx, trailPts, [4, 5.3]); // dashedPath 内部按 sketch SCALE(0.15) 换算 → 实际约 0.6/0.8 世界单位
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  ctx.restore();
 }
 
 /* ============================================================
@@ -677,9 +675,12 @@ export function createDynamicLayer(
   // ---- 车辆 ----
   const cars: CarState[] = [];
   const carRoads = dynRoads.filter(r => r.total > 8);
-  for (let i = 0; i < carRoads.length && cars.length < 10; i++) {
+  // 路网变大后按跨步取路，让车分散到各区而不是挤在前几条路
+  const CAR_CAP = 14;
+  const carStride = Math.max(1, Math.floor(carRoads.length / CAR_CAP));
+  for (let i = 0; i < carRoads.length && cars.length < CAR_CAP; i += carStride) {
     const n = 1 + (i % 2);
-    for (let k = 0; k < n && cars.length < 10; k++) {
+    for (let k = 0; k < n && cars.length < CAR_CAP; k++) {
       const isBus = (i + k) % 4 === 0;
       const bodyColor = CAR_COLORS_HEX[(i * 2 + k) % CAR_COLORS_HEX.length];
       cars.push({
@@ -1010,13 +1011,25 @@ export function createDynamicLayer(
     if (net.airport) {
       _drawAirportPlane(ctx, t, net, city, params);
     } else {
-      // 无机场：保持原来的大圆环绕
-      const a = t * 0.1;
-      const R = params.worldR * 1.6;
+      // 无机场：大圆环绕（角速度放慢，避免掠屏而过）
+      const a = t * 0.035;
+      const R = params.worldR * 1.4;
       const planeX = Math.cos(a) * R;
       const planeZ = Math.sin(a) * R;
       const planeAng = Math.atan2(-Math.sin(a), Math.cos(a));
-      drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
+      // 虚线圆弧尾迹（跟随实际航迹）
+      const trailPts: [number, number][] = [];
+      for (let i = 1; i <= 12; i++) {
+        const aa = a - i * 0.03;
+        trailPts.push([Math.cos(aa) * R, Math.sin(aa) * R]);
+      }
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
+      dashedPath(ctx, trailPts, [4, 5.3]);
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      lastPlanePos = { x: planeX, z: planeZ, airborne: true };
+      drawPlane(ctx, planeX, planeZ, planeAng);
     }
 
     // ---- 红绿灯状态点 ----
@@ -1034,6 +1047,9 @@ export function createDynamicLayer(
 
   // 帆船当前位置缓存（用于 debug）
   let lastBoatPos: { x: number; z: number } | null = null;
+
+  // 飞机当前位置缓存（用于 debug）
+  let lastPlanePos: { x: number; z: number; airborne: boolean } | null = null;
 
   function _drawFerry(
     ctx: CanvasRenderingContext2D,
@@ -1095,12 +1111,45 @@ export function createDynamicLayer(
     t: number,
     net: ReturnType<typeof buildTransport>,
     city: CityModel,
-    params: WorldParams,
+    _params: WorldParams,
   ): void {
+    // 尾迹：采样过去时刻的位姿（位姿是 t 的纯函数，无需历史缓存），只画空中段
+    for (let k = 8; k >= 1; k--) {
+      const past = _airportPlanePose(t - k * 0.6, net, city);
+      if (!past.airborne) continue;
+      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.inkFaded;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.45 * (1 - k / 9);
+      ctx.beginPath();
+      ctx.arc(past.x, past.z, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+    const pose = _airportPlanePose(t, net, city);
+    lastPlanePos = { x: pose.x, z: pose.z, airborne: pose.airborne };
+    ctx.save();
+    if (pose.scale !== 1.0) {
+      ctx.translate(pose.x, pose.z);
+      ctx.scale(pose.scale, pose.scale);
+      ctx.translate(-pose.x, -pose.z);
+    }
+    drawPlane(ctx, pose.x, pose.z, pose.ang);
+    ctx.restore();
+  }
+
+  /**
+   * 机场飞机在 t 时刻的位姿。空中各段时长 = 距离 / FLY_SPEED（固定巡航速度），
+   * 修掉旧实现「固定 8 秒飞任意距离」导致的超速。
+   */
+  function _airportPlanePose(
+    t: number,
+    net: ReturnType<typeof buildTransport>,
+    city: CityModel,
+  ): { x: number; z: number; ang: number; scale: number; airborne: boolean } {
     const airport = net.airport!;
     const cosAng = Math.cos(airport.ang);
     const sinAng = Math.sin(airport.ang);
-    const halfLen = airport.len / 2;  // 18
+    const halfLen = airport.len / 2;
 
     // 跑道两端（世界坐标）
     const runwayEndA: [number, number] = [
@@ -1112,9 +1161,7 @@ export function createDynamicLayer(
       airport.z + sinAng * halfLen,
     ];
 
-    // 停机坪中心（局部坐标转世界坐标）
-    // 局部坐标系：沿跑道 = local X，垂直 = local Z
-    // 世界坐标 = 旋转(ang) × 局部坐标 + 机场中心
+    // 停机坪中心（局部坐标转世界坐标；局部系：沿跑道 = X，垂直 = Z）
     const apronWorldX = airport.x + cosAng * airport.apron.dx - sinAng * airport.apron.dz;
     const apronWorldZ = airport.z + sinAng * airport.apron.dx + cosAng * airport.apron.dz;
 
@@ -1122,101 +1169,119 @@ export function createDynamicLayer(
     const targetDistrict = city.districts.length > 0 ? city.districts[0] : null;
     const targetX = targetDistrict ? targetDistrict.x + targetDistrict.width / 2 : 0;
     const targetZ = targetDistrict ? targetDistrict.z + targetDistrict.depth / 2 : 0;
-    const CRUISE_R = 18;
+    const CRUISE_R = 28;
 
-    // 周期 60 秒
-    const period = 60;
-    const p = (t % period) / period;
-
-    // 段时长（秒）→ 归一化比例
-    const T_APRON  = 5 / period;   // 停机坪停留：[0, T_APRON)
-    const T_TAXIAB = 5 / period;   // 滑跑 A→B：[T_APRON, T_APRON+T_TAXIAB)
-    const T_CLIMB  = 8 / period;   // 爬升：[.., ..)
-    const T_CRUISE = 25 / period;  // 巡航：[.., ..)
-    const T_RETURN = 8 / period;   // 返航：[.., ..)
-    // 剩余 9s = 降落滑跑 B→A
-
-    const P1 = T_APRON;
-    const P2 = P1 + T_TAXIAB;
-    const P3 = P2 + T_CLIMB;
-    const P4 = P3 + T_CRUISE;
-    const P5 = P4 + T_RETURN;
-    // P6 = 1.0
-
-    // 巡航圆终点（ang=2π=0，即 ang=0 处）= (targetX + R, targetZ)
+    // 巡航圆起点/终点（circleAng=0 处）
     const cruiseEndX = targetX + CRUISE_R;
     const cruiseEndZ = targetZ;
 
-    let planeX: number, planeZ: number, planeAng: number, drawScale: number;
+    // 各段时长（秒）：空中段按距离定速
+    const FLY_SPEED = 10; // 世界单位/秒
+    const climbDist = Math.hypot(cruiseEndX - runwayEndB[0], cruiseEndZ - runwayEndB[1]);
+    const durApron = 6;
+    const durTaxi = 5;
+    const durClimb = Math.min(45, Math.max(3, climbDist / FLY_SPEED));
+    const durCruise = (Math.PI * 2 * CRUISE_R) / FLY_SPEED;
+    const durReturn = durClimb;
+    const durLand = 6;
+    const durTaxiBack = 4; // 降落后滑回停机坪，消除「跑道端→停机坪」瞬移
+    const period = durApron + durTaxi + durClimb + durCruise + durReturn + durLand + durTaxiBack;
 
-    if (p < P1) {
-      // 停机坪停留
-      planeX = apronWorldX;
-      planeZ = apronWorldZ;
-      planeAng = airport.ang;
-      drawScale = 1.0;
-    } else if (p < P2) {
-      // 滑跑 A→B
-      const pp = (p - P1) / T_TAXIAB;
-      planeX = runwayEndA[0] + (runwayEndB[0] - runwayEndA[0]) * pp;
-      planeZ = runwayEndA[1] + (runwayEndB[1] - runwayEndA[1]) * pp;
-      planeAng = airport.ang;  // 沿跑道方向
-      drawScale = 1.0;
-    } else if (p < P3) {
-      // 爬升：从跑道 B 端 → 巡航圆起点(cruiseEndX, cruiseEndZ)
-      const pp = (p - P2) / T_CLIMB;
-      const fromX = runwayEndB[0], fromZ = runwayEndB[1];
-      const toX = cruiseEndX, toZ = cruiseEndZ;
-      planeX = fromX + (toX - fromX) * pp;
-      planeZ = fromZ + (toZ - fromZ) * pp;
-      const dx = toX - fromX, dz = toZ - fromZ;
-      // drawPlane 中 rotate(-ang) 后机身沿 z 轴，机头指向 -z
-      // 飞机向 (dx, dz) 方向飞 → ang = atan2(dx, dz)
-      planeAng = Math.atan2(dx, dz);
-      drawScale = 1.0 + 0.5 * pp;  // 1.0 → 1.5（升高感）
-    } else if (p < P4) {
-      // 巡航：顺时针绕目标区（0 → 2π）
-      const pp = (p - P3) / T_CRUISE;
-      const circleAng = pp * Math.PI * 2;  // 0 → 2π
-      planeX = targetX + Math.cos(circleAng) * CRUISE_R;
-      planeZ = targetZ + Math.sin(circleAng) * CRUISE_R;
-      // 顺时针切线方向 = (-sin, cos) → ang = atan2(-sinA, cosA)
-      // 但 drawPlane rotate(-ang) 机头 -z：ang = atan2(-sinA, cosA) 使机头朝切线
-      // 实际：飞机在 (cos(a), sin(a)) 处顺时针，切线 = (-sin(a), cos(a))
-      // 要让飞机面向 (-sinA, cosA)：ang = atan2(-sinA, cosA)
-      planeAng = Math.atan2(-Math.sin(circleAng), Math.cos(circleAng));
-      drawScale = 1.5;
-    } else if (p < P5) {
-      // 返航：从巡航圆终点 → 跑道 B 端
-      const pp = (p - P4) / T_RETURN;
-      const fromX = cruiseEndX, fromZ = cruiseEndZ;
-      const toX = runwayEndB[0], toZ = runwayEndB[1];
-      planeX = fromX + (toX - fromX) * pp;
-      planeZ = fromZ + (toZ - fromZ) * pp;
-      const dx = toX - fromX, dz = toZ - fromZ;
-      planeAng = Math.atan2(dx, dz);
-      drawScale = 1.5 - 0.5 * pp;  // 1.5 → 1.0
-    } else {
-      // 降落滑跑 B→A（注意：降落从 B 到 A，朝向与起飞相反）
-      const pp = (p - P5) / (1 - P5);
-      planeX = runwayEndB[0] + (runwayEndA[0] - runwayEndB[0]) * pp;
-      planeZ = runwayEndB[1] + (runwayEndA[1] - runwayEndB[1]) * pp;
-      // 从 B 飞向 A，方向 = A - B
+    let tt = t % period;
+    if (tt < 0) tt += period;
+
+    // 停机坪停留
+    if (tt < durApron) {
+      return { x: apronWorldX, z: apronWorldZ, ang: airport.ang, scale: 1.0, airborne: false };
+    }
+    tt -= durApron;
+
+    // 滑跑 A→B
+    if (tt < durTaxi) {
+      const pp = tt / durTaxi;
+      return {
+        x: runwayEndA[0] + (runwayEndB[0] - runwayEndA[0]) * pp,
+        z: runwayEndA[1] + (runwayEndB[1] - runwayEndA[1]) * pp,
+        ang: airport.ang,
+        scale: 1.0,
+        airborne: false,
+      };
+    }
+    tt -= durTaxi;
+
+    // 爬升：跑道 B 端 → 巡航圆起点
+    if (tt < durClimb) {
+      const pp = tt / durClimb;
+      const dx = cruiseEndX - runwayEndB[0];
+      const dz = cruiseEndZ - runwayEndB[1];
+      return {
+        x: runwayEndB[0] + dx * pp,
+        z: runwayEndB[1] + dz * pp,
+        // drawPlane 中 rotate(-ang) 后机头指向 -z：向 (dx,dz) 飞 → ang = atan2(dx, dz)
+        ang: Math.atan2(dx, dz),
+        scale: 1.0 + 0.5 * pp, // 升高感
+        airborne: true,
+      };
+    }
+    tt -= durClimb;
+
+    // 巡航：顺时针绕目标区一圈
+    if (tt < durCruise) {
+      const circleAng = (tt / durCruise) * Math.PI * 2;
+      return {
+        x: targetX + Math.cos(circleAng) * CRUISE_R,
+        z: targetZ + Math.sin(circleAng) * CRUISE_R,
+        // 顺时针切线 = (-sin, cos)
+        ang: Math.atan2(-Math.sin(circleAng), Math.cos(circleAng)),
+        scale: 1.5,
+        airborne: true,
+      };
+    }
+    tt -= durCruise;
+
+    // 返航：巡航圆终点 → 跑道 B 端
+    if (tt < durReturn) {
+      const pp = tt / durReturn;
+      const dx = runwayEndB[0] - cruiseEndX;
+      const dz = runwayEndB[1] - cruiseEndZ;
+      return {
+        x: cruiseEndX + dx * pp,
+        z: cruiseEndZ + dz * pp,
+        ang: Math.atan2(dx, dz),
+        scale: 1.5 - 0.5 * pp,
+        airborne: true,
+      };
+    }
+    tt -= durReturn;
+
+    // 降落滑跑 B→A
+    if (tt < durLand) {
+      const pp = tt / durLand;
       const dx = runwayEndA[0] - runwayEndB[0];
       const dz = runwayEndA[1] - runwayEndB[1];
-      planeAng = Math.atan2(dx, dz);
-      drawScale = 1.0;
+      return {
+        x: runwayEndB[0] + dx * pp,
+        z: runwayEndB[1] + dz * pp,
+        ang: Math.atan2(dx, dz),
+        scale: 1.0,
+        airborne: false,
+      };
     }
+    tt -= durLand;
 
-    // 带缩放绘制飞机（scale 模拟高度感）
-    ctx.save();
-    if (drawScale !== 1.0) {
-      ctx.translate(planeX, planeZ);
-      ctx.scale(drawScale, drawScale);
-      ctx.translate(-planeX, -planeZ);
+    // 滑回停机坪 A→apron
+    {
+      const pp = Math.min(1, tt / durTaxiBack);
+      const dx = apronWorldX - runwayEndA[0];
+      const dz = apronWorldZ - runwayEndA[1];
+      return {
+        x: runwayEndA[0] + dx * pp,
+        z: runwayEndA[1] + dz * pp,
+        ang: Math.atan2(dx, dz),
+        scale: 1.0,
+        airborne: false,
+      };
     }
-    drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
-    ctx.restore();
   }
 
   /* ----------------------------------------------------------
@@ -1242,6 +1307,10 @@ export function createDynamicLayer(
     return lastBoatPos;
   }
 
+  function debugPlanePos(): { x: number; z: number; airborne: boolean } | null {
+    return lastPlanePos;
+  }
+
   return {
     draw,
     hitables: () => [],
@@ -1251,5 +1320,6 @@ export function createDynamicLayer(
     debugTrainPos,
     debugFerryPos,
     debugBoatPos,
+    debugPlanePos,
   };
 }

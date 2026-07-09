@@ -47,7 +47,7 @@ export function createCards(parent: HTMLElement): CardsHandle {
       const cons = d.buildings.filter((b) => b.construction).length;
       card.innerHTML = `
         <button class="close" onclick="this.parentElement.style.display='none'">✕</button>
-        <h3>🏘 ${esc(d.dir || '(根目录)')} 街区</h3>
+        <h3>🏘 ${esc(d.dir || '(根目录)')} 区</h3>
         <div class="meta">${d.buildings.length} 栋建筑 · 共 ${words} 字<br>近 7 天活跃 ${act} · 施工位 ${cons}</div>`;
       card.style.display = 'block';
     },

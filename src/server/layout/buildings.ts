@@ -1,18 +1,45 @@
-import type { Building, NoteMeta } from '../../shared/types.js';
+import type { Building, NoteMeta, Road } from '../../shared/types.js';
 import { pointInPolygon, type Plot } from './districts.js';
+import { buildDistrictRoads } from './districtroads.js';
 import { hashSeed, mulberry32 } from './rng.js';
 
 const CELL = 4;
+const ROAD_CLEAR = 2.7; // 建筑格心距任意区内道路轴线的最小距离
+
+function distToSegment(
+  px: number,
+  pz: number,
+  [x1, z1]: [number, number],
+  [x2, z2]: [number, number],
+): number {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const lenSq = dx * dx + dz * dz;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / lenSq));
+  return Math.hypot(px - (x1 + dx * t), pz - (z1 + dz * t));
+}
 
 export function placeBuildings(
   plot: Plot,
   notes: NoteMeta[],
   inlinks: Record<string, number>,
+  roads: Road[] = buildDistrictRoads(plot),
 ): Building[] {
   const cols = Math.max(3, Math.floor(plot.width / CELL));
   const rows = Math.max(3, Math.floor(plot.depth / CELL));
   const streetRow = Math.floor(rows / 2);
   const occupied = new Set<number>();
+
+  /** 格心是否压在区内道路上（避让带内） */
+  function nearRoad(wx: number, wz: number): boolean {
+    for (const r of roads) {
+      const pts = r.points;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (distToSegment(wx, wz, pts[i], pts[i + 1]) < ROAD_CLEAR) return true;
+      }
+    }
+    return false;
+  }
 
   const readme = notes.find((n) => n.title.toLowerCase() === 'readme');
   const streetTargets = new Set((readme?.links ?? []).map((t) => t.split('/').pop()!));
@@ -50,27 +77,28 @@ export function placeBuildings(
     let i = startIdx;
     let guard = 0;
 
-    // 第一轮：多边形约束
+    // 第一轮：多边形约束 + 道路避让
     while (guard < total) {
       const c = i % cols;
       const r = Math.floor(i / cols);
-      const isStreetRow = r === streetRow;
+      const [wx, wz] = cellCenter(c, r);
       const cellOk =
         !occupied.has(i) &&
-        (!isStreetRow || isCivic) &&
+        (isCivic || !nearRoad(wx, wz)) &&
         cellInPoly(c, r);
       if (cellOk) return i;
       i = (i + 1) % total;
       guard++;
     }
 
-    // 回退：bbox 内任意空格（忽略 polygon，但仍跳过主街行和已占格）
+    // 回退：bbox 内任意空格（忽略 polygon，但仍避让道路和已占格）
     i = startIdx;
     guard = 0;
     while (guard < total) {
+      const c = i % cols;
       const r = Math.floor(i / cols);
-      const isStreetRow = r === streetRow;
-      const cellOk = !occupied.has(i) && (!isStreetRow || isCivic);
+      const [wx, wz] = cellCenter(c, r);
+      const cellOk = !occupied.has(i) && (isCivic || !nearRoad(wx, wz));
       if (cellOk) return i;
       i = (i + 1) % total;
       guard++;

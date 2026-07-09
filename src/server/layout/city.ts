@@ -9,6 +9,7 @@ import type {
 } from '../../shared/types.js';
 import { placeBuildings } from './buildings.js';
 import { layoutDistricts } from './districts.js';
+import { buildDistrictRoads } from './districtroads.js';
 import { buildRoads } from './roads.js';
 
 export function tierOf(noteCount: number): Tier {
@@ -41,7 +42,7 @@ export function buildCityModel(
     depth: plot.depth,
     polygon: plot.polygon,
     isInbox: /inbox/i.test(plot.dir),
-    buildings: placeBuildings(plot, byDir.get(plot.dir)!, graph.inlinks),
+    buildings: placeBuildings(plot, byDir.get(plot.dir)!, graph.inlinks, buildDistrictRoads(plot)),
   }));
 
   return {
