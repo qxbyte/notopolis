@@ -9,8 +9,7 @@
 
 import type { CityModel, District } from '@shared/types';
 import type { WorldParams } from '../world/params';
-import { buildPolyline } from '../util/poly';
-import { polyDist } from '../util/poly';
+import { buildPolyline, polyDist } from '../util/poly';
 import { rng0 } from '../util/seed';
 
 /* ------------------------------------------------------------------ */
@@ -462,7 +461,9 @@ export function buildTransport(
 
     let pts = buildArcPts(ax, az, bx, bz, railRng);
 
-    // harbor：如果折线入海，尝试反向弯曲
+    // harbor：如果折线入海，尝试反向弯曲；若重试仍入海则标记整段为跨海桥
+    let seaBridge = false;  // 标记是否为跨海桥（整段 bridges = [[0,1]]）
+
     if (params.waterStyle === 'sea' && params.seaData && checkSeaIntersection(pts, params)) {
       // 重新生成一次（railRng 已消耗，需回到下一次调用来反向——这里用 offset 反号重算）
       const midX = (ax + bx) / 2;
@@ -476,13 +477,18 @@ export function buildTransport(
       const retryOffset = -(retryRng() * 2 - 1) * 0.15 * edgeLen;
       const ctrlX = midX + perpX * retryOffset;
       const ctrlZ = midZ + perpZ * retryOffset;
-      const retryPts = sampleBezier(ax, az, ctrlX, ctrlZ, bx, bz, 8);
-      // 若仍入海 → 接受，pts 保留 retry 版（标记为 bridge）
-      pts = retryPts;
+      pts = sampleBezier(ax, az, ctrlX, ctrlZ, bx, bz, 8);
+
+      if (checkSeaIntersection(pts, params)) {
+        // 重试后仍入海 → 接受为跨海桥，整段标记为 bridge
+        seaBridge = true;
+      }
     }
 
     const polyline = buildPolyline(pts);
-    const bridges = detectBridges(pts, polyline.lens, polyline.total, params);
+    const bridges: [number, number][] = seaBridge
+      ? [[0, 1]]
+      : detectBridges(pts, polyline.lens, polyline.total, params);
     const tunnels = detectTunnels(pts, polyline.lens, polyline.total, params);
 
     const edge: RailEdge = {
