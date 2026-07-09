@@ -1,4 +1,4 @@
-import type { CityModel, VaultConfig } from '@shared/types';
+import type { CityDiff, CityModel, VaultConfig } from '@shared/types';
 
 export type WorldVault = VaultConfig & {
   noteCount: number;
@@ -31,6 +31,12 @@ export async function fetchWorld(): Promise<{ vaults: WorldVault[] }> {
 export async function fetchCity(id: string): Promise<CityModel> {
   const res = await apiFetch(`/api/city/${id}`);
   return res.json() as Promise<CityModel>;
+}
+
+/** 入城变化摘要（POST，有副作用：推进快照基线） */
+export async function fetchVisitSummary(id: string): Promise<CityDiff> {
+  const res = await apiFetch(`/api/city/${id}/visit`, { method: 'POST' });
+  return res.json() as Promise<CityDiff>;
 }
 
 export async function fetchNote(id: string, relPath: string): Promise<string> {

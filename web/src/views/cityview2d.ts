@@ -45,6 +45,8 @@ export interface CityViewHandle {
   flyTo(x: number, z: number, zoomPx: number, durMs?: number): void;
   /** 按 notePath 拾取建筑并展示信息卡；命中返回 true */
   pickByPath(notePath: string): boolean;
+  /** 定位到建筑：飞行 + 高亮 + 卡片；命中返回 true */
+  locate(notePath: string): boolean;
   /** 打开搜索浮层 */
   openSearch(): void;
   /** 搜索命中（调试/测试用） */
@@ -430,6 +432,10 @@ export function showCity2D(
     },
 
     pickByPath,
+
+    locate(notePath: string): boolean {
+      return locate(notePath);
+    },
 
     openSearch(): void {
       searchUI.open();

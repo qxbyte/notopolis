@@ -5,6 +5,8 @@ import path from 'node:path';
 import { loadConfig, makeVault, saveConfig } from './config.js';
 import { buildGraph } from './graph.js';
 import { buildCityModel, tierOf } from './layout/city.js';
+import { diffCity, snapshotOf } from './diff.js';
+import { loadSnapshot, saveSnapshot } from './snapshots.js';
 import { scanVault } from './scanner.js';
 import type { VaultConfig } from '../shared/types.js';
 
@@ -49,6 +51,20 @@ export async function createServer(): Promise<{
     if (!vault) return reply.code(404).send({ error: 'vault not found' });
     const scan = await scanVault(vault.path);
     return buildCityModel(vault, scan, buildGraph(scan.notes), Date.now());
+  });
+
+  // 入城变化摘要：对比上次快照并推进基线（有副作用，故用 POST）
+  app.post('/api/city/:vaultId/visit', async (req, reply) => {
+    const { vaultId } = req.params as { vaultId: string };
+    const cfg = await loadConfig();
+    const vault = cfg.vaults.find((v) => v.id === vaultId);
+    if (!vault) return reply.code(404).send({ error: 'vault not found' });
+    const scan = await scanVault(vault.path);
+    const city = buildCityModel(vault, scan, buildGraph(scan.notes), Date.now());
+    const prev = await loadSnapshot(vaultId);
+    const diff = diffCity(prev, city);
+    await saveSnapshot(vaultId, snapshotOf(city, Date.now()));
+    return diff;
   });
 
   app.post('/api/vaults', async (req, reply) => {

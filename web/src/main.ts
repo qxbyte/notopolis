@@ -1,11 +1,13 @@
 import './ui/style.css';
-import { fetchWorld, fetchCity, connectWS } from './api';
+import { fetchWorld, fetchCity, fetchVisitSummary, connectWS } from './api';
 import type { WorldVault } from './api';
 import { showHome, showOnboarding } from './ui/onboarding';
 import { showWorldMap2D } from './views/worldmap2d';
 import { showCity2D } from './views/cityview2d';
 import type { CityViewHandle } from './views/cityview2d';
 import { closeTopOverlay, clearOverlays } from './ui/overlaystack';
+import { summarize, showBanner } from './ui/banner';
+import type { CityDiff } from '@shared/types';
 
 // 保留 showOnboarding 引用避免 tree-shake 删掉（向后兼容）
 void showOnboarding;
@@ -17,6 +19,8 @@ document.body.appendChild(container);
 let current: { dispose(): void } | null = null;
 let currentVaultId: string | null = null;
 let navigating = false;
+let currentBanner: { dispose(): void } | null = null;
+let lastDiff: CityDiff | null = null;
 
 // 调试对象（在每次视图切换时更新）
 const __notopolis: {
@@ -42,13 +46,39 @@ function clearCurrent(): void {
   current?.dispose();
   current = null;
   currentVaultId = null;
+  currentBanner?.dispose();
+  currentBanner = null;
   clearOverlays();
 }
 
 async function enterCity(vaultId: string): Promise<void> {
   const { vaults } = await fetchWorld();
   const vault = vaults.find((v) => v.id === vaultId);
-  if (vault) await goCity(vault);
+  if (vault) await goCity(vault, false, true);
+}
+
+/** 入城后异步拉取变化摘要并展示横幅（不阻塞渲染；首访或无变化不展示） */
+async function showVisitSummary(vaultId: string, handle: CityViewHandle): Promise<void> {
+  try {
+    const diff = await fetchVisitSummary(vaultId);
+    lastDiff = diff;
+    // 视图可能已切走
+    if (currentVaultId !== vaultId || current !== handle) return;
+    const text = summarize(diff);
+    if (!text) return;
+    const items = [
+      ...diff.created.map((c) => ({ ...c, tag: '🏗 新建' })),
+      ...diff.updated.map((c) => ({ ...c, tag: '✎ 翻修' })),
+    ].map((c) => ({ path: c.path, title: c.title, tag: c.tag }));
+    currentBanner?.dispose();
+    currentBanner = showBanner(
+      container,
+      text,
+      items.length ? { items, onPick: (p) => handle.locate(p) } : null,
+    );
+  } catch {
+    // 摘要失败静默——不影响入城
+  }
 }
 
 function goHome(): void {
@@ -65,7 +95,7 @@ async function goWorldMap(): Promise<void> {
   try {
     clearCurrent();
     const { vaults } = await fetchWorld();
-    current = showWorldMap2D(container, vaults, goCity, goHome);
+    current = showWorldMap2D(container, vaults, (v) => goCity(v, false, true), goHome);
     __notopolis.view = 'worldmap';
     __notopolis.pickables = 0;
     __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
@@ -74,7 +104,7 @@ async function goWorldMap(): Promise<void> {
   }
 }
 
-async function goCity(vault: WorldVault, restoreTaskPanel = false): Promise<void> {
+async function goCity(vault: WorldVault, restoreTaskPanel = false, summary = false): Promise<void> {
   if (navigating) return;
   navigating = true;
   try {
@@ -84,6 +114,7 @@ async function goCity(vault: WorldVault, restoreTaskPanel = false): Promise<void
     const cityHandle: CityViewHandle = showCity2D(container, vault, city, goWorldMap);
     current = cityHandle;
     if (restoreTaskPanel) cityHandle.openTaskPanel();
+    if (summary) void showVisitSummary(vault.id, cityHandle);
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
     __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
@@ -100,6 +131,8 @@ async function goCity(vault: WorldVault, restoreTaskPanel = false): Promise<void
     dbg.openTaskPanel = () => cityHandle.openTaskPanel();
     dbg.closeTaskPanel = () => cityHandle.closeTaskPanel();
     dbg.taskPanelOpen = () => cityHandle.taskPanelOpen();
+    dbg.locate = (p: string) => cityHandle.locate(p);
+    dbg.visitSummary = () => lastDiff;
   } finally {
     navigating = false;
   }

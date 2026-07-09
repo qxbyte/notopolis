@@ -81,3 +81,21 @@ export interface CityModel {
   activeCount7d: number;
   generatedAt: number;
 }
+
+/** 入城快照（F3 变化摘要基线）——存于 <configDir>/snapshots/<vaultId>.json */
+export interface CitySnapshot {
+  visitedAt: number;
+  notes: Record<string, { mtimeMs: number; openTasks: number; landmark: boolean }>;
+}
+
+/** 自上次到访以来的变化 */
+export interface CityDiff {
+  firstVisit: boolean;
+  lastVisitAt: number | null;
+  created: { path: string; title: string }[];
+  updated: { path: string; title: string }[];
+  removed: { path: string; title: string }[];
+  newLandmarks: { path: string; title: string }[];
+  tasksDone: number;
+  tasksAdded: number;
+}

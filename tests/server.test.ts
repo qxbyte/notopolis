@@ -62,6 +62,26 @@ describe('REST API', () => {
     expect(evil.statusCode).toBe(400);
   });
 
+  it('POST /visit：首访 firstVisit，第二次连调（无变化）diff 全空', async () => {
+    const { app } = await createServer();
+    const v = await addFixtureVault(app);
+
+    const first = (await app.inject({ method: 'POST', url: `/api/city/${v.id}/visit` })).json();
+    expect(first.firstVisit).toBe(true);
+
+    const second = (await app.inject({ method: 'POST', url: `/api/city/${v.id}/visit` })).json();
+    expect(second.firstVisit).toBe(false);
+    expect(second.created).toEqual([]);
+    expect(second.updated).toEqual([]);
+    expect(second.removed).toEqual([]);
+    expect(second.newLandmarks).toEqual([]);
+    expect(second.tasksDone).toBe(0);
+    expect(second.tasksAdded).toBe(0);
+
+    const notFound = await app.inject({ method: 'POST', url: '/api/city/nope/visit' });
+    expect(notFound.statusCode).toBe(404);
+  });
+
   it('非法 theme 回落到 plains', async () => {
     const { app } = await createServer();
     const res = await app.inject({
