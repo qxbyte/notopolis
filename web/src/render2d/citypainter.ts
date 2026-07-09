@@ -543,20 +543,23 @@ function paintSea(
     }
   }
 
-  // 海鸥（3-5 个小 V 字散布海面上空）
-  const gullCount = 3 + Math.floor(rng() * 3);
-  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
-  for (let gi = 0; gi < gullCount; gi++) {
-    const idx = Math.floor(rng() * coastPts.length);
-    const [gx, gz] = coastPts[idx];
-    const gfx = gx + cosSide * (20 + rng() * 40);
-    const gfz = gz + sinSide * (20 + rng() * 40);
-    const span = 1.2 + rng() * 0.8;
-    ctx.beginPath();
-    ctx.moveTo(gfx - span, gfz);
-    ctx.quadraticCurveTo(gfx, gfz - span * 0.4, gfx + span, gfz);
-    ctx.stroke();
+  // 海鸥（extras.includes('seagull') 控制）
+  const seaBiome = getBiome(params.theme ?? 'harbor');
+  if (seaBiome.extras.includes('seagull')) {
+    const gullCount = 3 + Math.floor(rng() * 3);
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+    for (let gi = 0; gi < gullCount; gi++) {
+      const idx = Math.floor(rng() * coastPts.length);
+      const [gx, gz] = coastPts[idx];
+      const gfx = gx + cosSide * (20 + rng() * 40);
+      const gfz = gz + sinSide * (20 + rng() * 40);
+      const span = 1.2 + rng() * 0.8;
+      ctx.beginPath();
+      ctx.moveTo(gfx - span, gfz);
+      ctx.quadraticCurveTo(gfx, gfz - span * 0.4, gfx + span, gfz);
+      ctx.stroke();
+    }
   }
 }
 
@@ -1379,6 +1382,32 @@ function paintExtras(
         ctx.lineTo(wx - Math.cos(ba) * bladeLen, wz - Math.sin(ba) * bladeLen);
         ctx.stroke();
       }
+    }
+  }
+
+  // 干草垛（wobblyCircle 为底盘 + 锥顶线）
+  if (extras.includes('haybale')) {
+    const haybaleCount = 2 + Math.floor(rng() * 2);
+    for (let hbi = 0; hbi < haybaleCount; hbi++) {
+      const hbx = minX + params.cityHalfW * 1.1 + rng() * (maxX - minX - params.cityHalfW * 2.2);
+      const hbz = minZ + params.cityHalfD * 1.1 + rng() * (maxZ - minZ - params.cityHalfD * 2.2);
+      const hbr = 2 + rng() * 1.5;
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#c8b870';
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+      wobblyCircle(ctx, rng, hbx, hbz, hbr, 0.1);
+      ctx.fill();
+      ctx.stroke();
+      // 圆锥顶
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+      ctx.beginPath();
+      ctx.moveTo(hbx - hbr, hbz);
+      ctx.lineTo(hbx, hbz - hbr * 1.2);
+      ctx.lineTo(hbx + hbr, hbz);
+      ctx.stroke();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
     }
   }
 
