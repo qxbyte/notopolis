@@ -58,7 +58,7 @@ export const BIOMES: Record<string, BiomeSpec> = {
     waterStyle: 'river',
     mountains: { proximity: 0, density: 0, snowline: 0.85 },
     vegetation: { kind: 'mixed', density: 1.0 },
-    extras: ['fields', 'windmill'],
+    extras: ['fields', 'windmill', 'haybale'],
   },
 
   harbor: {
