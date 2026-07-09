@@ -224,8 +224,8 @@ function paintRiver(
 ): void {
   const { RIVER_W, riverWorld, T } = params;
   const step = 1;
-  const vMin = -T * 1.2;
-  const vMax = T * 1.2;
+  const vMin = -T * 1.5; // 覆盖 ±T 地图对角（1.41T）
+  const vMax = T * 1.5;
 
   // 采样河心线
   const pts: [number, number][] = [];
@@ -583,8 +583,8 @@ function paintFrozenRiver(
 ): void {
   const { RIVER_W, riverWorld, T } = params;
   const step = 1;
-  const vMin = -T * 1.2;
-  const vMax = T * 1.2;
+  const vMin = -T * 1.5; // 覆盖 ±T 地图对角（1.41T）
+  const vMax = T * 1.5;
 
   const pts: [number, number][] = [];
   for (let v = vMin; v <= vMax; v += step) pts.push(riverWorld(v));
@@ -660,7 +660,7 @@ function paintTorrentRiver(
   const { RIVER_W, riverWorld, T } = params;
   const narrowW = RIVER_W * 0.55;
   const step = 1;
-  const vMin = -T * 1.2, vMax = T * 1.2;
+  const vMin = -T * 1.5, vMax = T * 1.5; // 覆盖 ±T 地图对角（1.41T）
 
   const pts: [number, number][] = [];
   for (let v = vMin; v <= vMax; v += step) pts.push(riverWorld(v));
@@ -2617,6 +2617,7 @@ export function buildCityPainter(
   city: CityModel,
   params: WorldParams,
   wsPrefix: string,
+  bounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
 ): CityPainter {
   // 数据准备：构建交通网（纯数据，可缓存）
   const transport = buildTransport(city, params, wsPrefix);
@@ -2651,15 +2652,15 @@ export function buildCityPainter(
   // ctx 必须已设置世界坐标变换（世界单位 → 像素）
   // tileBounds 使用整个城市扩展范围；hiCanvas 路径下 ctx 覆盖完整区域
   function drawStatic(ctx: CanvasRenderingContext2D): void {
-    // 从 ctx 当前变换反推世界范围（hiCanvas 下为 viewport→world，worldcanvas 下为 tile 范围）
-    // 这里我们使用全城市范围的边界框以保证完整绘制
+    // 绘制范围：优先使用外部传入的地图边界（与相机可平移范围一致，
+    // 否则纸底/荒野只覆盖城市 bbox+130，边界处会出现矩形接缝）
     const xs = city.districts.flatMap((d) => [d.x, d.x + d.width]);
     const zs = city.districts.flatMap((d) => [d.z, d.z + d.depth]);
     const expand = 130;
-    const minX = (xs.length ? Math.min(...xs) : -60) - expand;
-    const minZ = (zs.length ? Math.min(...zs) : -60) - expand;
-    const maxX = (xs.length ? Math.max(...xs) : 60) + expand;
-    const maxZ = (zs.length ? Math.max(...zs) : 60) + expand;
+    const minX = bounds?.minX ?? (xs.length ? Math.min(...xs) : -60) - expand;
+    const minZ = bounds?.minZ ?? (zs.length ? Math.min(...zs) : -60) - expand;
+    const maxX = bounds?.maxX ?? (xs.length ? Math.max(...xs) : 60) + expand;
+    const maxZ = bounds?.maxZ ?? (zs.length ? Math.max(...zs) : 60) + expand;
 
     // 层 1 中的纸底色使用 biome ground
     const biome = getBiome(city.theme);

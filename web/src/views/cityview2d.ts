@@ -75,12 +75,17 @@ export function showCity2D(
   const T = Math.max(320, worldR * 2);
 
   // ---- 2. 扩展地图边界（含世界背景区域）----
-  const expand = Math.max(80, worldR * 0.55);
+  // 世界矩形按窗口纵横比（16:9 等），铺满窗口不露界外纸面；
+  // 高度取 max(±T, 城市 bbox+expand)：湖泊/海岸/机场都生成在 ±T 内，必须完整覆盖
+  const expand = Math.max(80, worldR * 0.35);
+  const aspect = Math.max(1, container.clientWidth / Math.max(1, container.clientHeight));
+  const halfZ = Math.max(T, Math.max(-minZ, maxZ) + expand);
+  const halfX = Math.max(halfZ * aspect, Math.max(-minX, maxX) + expand);
   const expandedBounds = {
-    minX: minX - expand,
-    minZ: minZ - expand,
-    maxX: maxX + expand,
-    maxZ: maxZ + expand,
+    minX: -halfX,
+    minZ: -halfZ,
+    maxX: halfX,
+    maxZ: halfZ,
   };
 
   // ---- 3. 世界参数 ----
@@ -99,7 +104,7 @@ export function showCity2D(
 
   // ---- 5. 构建城市 painter 并绘制到低分辨率 worldcanvas ----
   const paintStart = performance.now();
-  const painter: CityPainter = buildCityPainter(city, params, wsPrefix);
+  const painter: CityPainter = buildCityPainter(city, params, wsPrefix, expandedBounds);
   const hitItems: HitItem[] = painter.hitItems;
   // 低分辨率离屏 blit（8ppu 质量，交互流畅用）
   world.paint((ctx) => painter.drawStatic(ctx));

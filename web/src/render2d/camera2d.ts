@@ -39,14 +39,23 @@ export function createCamera2D(
   const fitZ = canvas.height / boundsH;
   const fit  = Math.min(fitX, fitZ);
 
-  const zoomMin = fit * 0.5;
   const zoomMax = fit * 12;
 
-  let zoom = fit;
+  const worldW = maxX - minX;
+  const worldH = maxZ - minZ;
+
+  /** cover 缩放下限：viewport 始终在世界边界内，铺满窗口不露界外纸面（canvas 尺寸变化时动态取值） */
+  function zoomMin(): number {
+    return Math.max(canvas.width / worldW, canvas.height / worldH);
+  }
+
+  let zoom = Math.max(fit, zoomMin());
   const center = {
     x: (fb.minX + fb.maxX) / 2,
     z: (fb.minZ + fb.maxZ) / 2,
   };
+  // 初始中心也按半视口钳制（fit 视野贴近世界边缘时不露界外；函数声明有提升，可直接调用）
+  clampCenter();
 
   const listeners: Array<() => void> = [];
 
@@ -55,8 +64,15 @@ export function createCamera2D(
   }
 
   function clampCenter(): void {
-    center.x = clamp(center.x, minX, maxX);
-    center.z = clamp(center.z, minZ, maxZ);
+    // 按半视口钳制：viewport 边缘不越过世界边界
+    const halfW = canvas.width  / 2 / zoom;
+    const halfD = canvas.height / 2 / zoom;
+    center.x = worldW <= halfW * 2
+      ? (minX + maxX) / 2
+      : clamp(center.x, minX + halfW, maxX - halfW);
+    center.z = worldH <= halfD * 2
+      ? (minZ + maxZ) / 2
+      : clamp(center.z, minZ + halfD, maxZ - halfD);
   }
 
   function worldToScreen(x: number, z: number): [number, number] {
@@ -133,7 +149,7 @@ export function createCamera2D(
     // 缩放量与 deltaY 幅度成比例：触控板的连续小增量得到平滑缩放，
     // 传统滚轮一格（deltaY≈±100）约 ±12%
     const factor = Math.exp(-e.deltaY * 0.0012);
-    zoom = clamp(zoom * factor, zoomMin, zoomMax);
+    zoom = clamp(zoom * factor, zoomMin(), zoomMax);
 
     // 调整 center 使锚点不动
     const [newWx, newWz] = screenToWorld(anchorSx, anchorSy);
@@ -152,7 +168,7 @@ export function createCamera2D(
   return {
     get center() { return center; },
     get zoom()   { return zoom; },
-    set zoom(v: number) { zoom = clamp(v, zoomMin, zoomMax); },
+    set zoom(v: number) { zoom = clamp(v, zoomMin(), zoomMax); clampCenter(); },
     worldToScreen,
     screenToWorld,
     apply,
@@ -165,9 +181,10 @@ export function createCamera2D(
       return v;
     },
     setView(cx: number, cz: number, zoomPx: number) {
-      zoom = clamp(zoomPx, zoomMin, zoomMax);
-      center.x = clamp(cx, minX, maxX);
-      center.z = clamp(cz, minZ, maxZ);
+      zoom = clamp(zoomPx, zoomMin(), zoomMax);
+      center.x = cx;
+      center.z = cz;
+      clampCenter();
       notify();
     },
     dispose() {

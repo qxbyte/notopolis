@@ -95,14 +95,14 @@ describe('Camera2D — worldToScreen / screenToWorld 互逆', () => {
 });
 
 describe('Camera2D — fit 初始 zoom', () => {
-  it('初始 zoom 等于 min(canvas.w / boundsW, canvas.h / boundsH)', () => {
+  it('初始 zoom = fit，且不低于 cover 下限（地图铺满窗口，不露界外纸面）', () => {
     const canvas = makeCanvas(800, 600);
     const bounds = { minX: 0, minZ: 0, maxX: 200, maxZ: 100 };
     const cam = createCamera2D(canvas, bounds);
 
-    const fitX = 800 / 200; // 4
-    const fitZ = 600 / 100; // 6
-    const expectedZoom = Math.min(fitX, fitZ); // 4
+    const fit = Math.min(800 / 200, 600 / 100); // 4（contain）
+    const cover = Math.max(800 / 200, 600 / 100); // 6（cover 下限）
+    const expectedZoom = Math.max(fit, cover); // 6
 
     expect(cam.zoom).toBeCloseTo(expectedZoom, 5);
   });
@@ -145,6 +145,8 @@ describe('Camera2D — 拖拽平移方向', () => {
     const bounds = { minX: -200, minZ: -200, maxX: 200, maxZ: 200 };
     const cam = createCamera2D(canvas, bounds);
 
+    // cover 语义下初始 zoom 时 viewport 宽 == 世界宽，center 被锁定；放大后才可平移
+    cam.zoom = 8;
     const centerXBefore = cam.center.x;
 
     // mousedown
