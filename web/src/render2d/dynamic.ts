@@ -92,6 +92,8 @@ export interface DynamicLayer {
   debugTrainPos(i: number): { x: number; z: number } | null;
   /** 测试辅助：返回渡轮当前世界坐标，若不存在返回 null */
   debugFerryPos(): { x: number; z: number } | null;
+  /** 测试辅助：返回帆船当前世界坐标（仅限最近一次 draw 后更新） */
+  debugBoatPos(): { x: number; z: number } | null;
 }
 
 /* ============================================================
@@ -101,6 +103,13 @@ export interface DynamicLayer {
 const SKIN_TONES = ['#f5d5b0', '#e8c09a', '#d9a878', '#b5885c', '#8a5c3a', '#6b4530'];
 const CLOTH_PALETTE = ['#c0453a', '#3e6b9e', '#4f8a3f', '#d08f2e', '#8e5a9e', '#4fa8a0', '#9e4f6b', '#6b6b9e'];
 const CAR_COLORS_HEX = ['#d94848', '#3e6b9e', '#d08f2e', '#4fa8a0', '#f2f2f2', '#8e5a9e'];
+
+/** ping-pong 往返：将 t 映射到 [0, total]，无回卷瞬移 */
+function pingPong(t: number, total: number): number {
+  const cycle = total * 2;
+  const p = ((t % cycle) + cycle) % cycle;
+  return p < total ? p : cycle - p;
+}
 
 /* ============================================================
    lightGreen（本地实现，不依赖 roads.ts）
@@ -824,7 +833,8 @@ export function createDynamicLayer(
           } else if (train.s <= 0) {
             // 到达 from 节点
             train.s = 0;
-            const arrivedNode = train.dir === 1
+            // dir=-1 时 s 减到 0，到达 from 端
+            const arrivedNode = train.dir === -1
               ? net.mstEdges[train.edgeIdx].from
               : net.mstEdges[train.edgeIdx].to;
             trainArriveNode(train, arrivedNode);
@@ -927,20 +937,29 @@ export function createDynamicLayer(
     } else if (waterStyle === 'sea' && params.seaData) {
       // 海：沿海岸线采样点巡航
       const coastPts = params.seaData.coastPts;
-      if (coastPts.length >= 2) {
-        const ci1 = Math.floor(((t * 2.2) % 1) * (coastPts.length - 1));
-        const ci2 = Math.min(coastPts.length - 1, ci1 + 1);
+      const totalPts = coastPts.length - 1;
+      if (totalPts < 1) {
+        // 跳过
+      } else {
+        // 帆船：沿海岸往返
+        const COAST_BOAT_SPEED = 0.35;  // points/秒
+        const boatPosF = pingPong(t * COAST_BOAT_SPEED, totalPts);
+        const ci1 = Math.min(Math.floor(boatPosF), totalPts - 1);
+        const ci2 = Math.min(ci1 + 1, totalPts);
         const [bx1, bz1] = coastPts[ci1];
         const [bx2, bz2] = coastPts[ci2];
         const boatAng = Math.atan2(bx2 - bx1, bz2 - bz1);
         const cosSide = Math.cos(params.seaData.sideAngle);
         const sinSide = Math.sin(params.seaData.sideAngle);
-        // 在海岸线往海里偏移 20-30 单位
-        const boatOffDist = 20 + 10 * ((t * 0.1) % 1);
+        const boatOffDist = 22;  // 固定偏移，不用 t*0.1 随机
+        lastBoatPos = { x: bx1 + cosSide * boatOffDist, z: bz1 + sinSide * boatOffDist };
         drawBoat(ctx, bx1 + cosSide * boatOffDist, bz1 + sinSide * boatOffDist, boatAng);
-        // 快艇（在另一侧）
-        const ci3 = Math.floor(((1 - (t * 0.6) % 1)) * (coastPts.length - 1));
-        const ci4 = Math.max(0, ci3 - 1);
+
+        // 快艇
+        const COAST_SB_SPEED = 0.28;
+        const sbPosF = pingPong(t * COAST_SB_SPEED + totalPts * 0.5, totalPts);
+        const ci3 = Math.min(Math.floor(sbPosF), totalPts - 1);
+        const ci4 = Math.min(ci3 + 1, totalPts);
         const [sx1, sz1] = coastPts[ci3];
         const [sx2, sz2] = coastPts[ci4];
         const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
@@ -954,10 +973,11 @@ export function createDynamicLayer(
     } else if (waterStyle === 'torrent') {
       // 激流：只出小舟（用 drawBoat 缩小）——在窄河上漂
       const { riverWorld: rw2, T: T2 } = params;
-      const bv2 = ((t * 3.5) % (T2 * 1.2)) - T2 * 0.6;
+      const bv2 = pingPong(t * 2.0, T2 * 1.0) - T2 * 0.5;
       const [bx3, bz3] = rw2(bv2);
       const [bx4, bz4] = rw2(bv2 + 0.5);
       const boatAng2 = Math.atan2(bx4 - bx3, bz4 - bz3);
+      lastBoatPos = { x: bx3, z: bz3 };
       ctx.save();
       ctx.translate(bx3, bz3);
       ctx.scale(0.6, 0.6);
@@ -970,17 +990,20 @@ export function createDynamicLayer(
         _drawFerry(ctx, t, net);
       }
     } else {
-      // river（plains 默认）— 原逻辑（海巡游船）
+      // river（plains 默认）— pingPong 无瞬移
       const { riverWorld, T } = params;
-      const bv = ((t * 2.2) % (T * 1.2)) - T * 0.6;
+      const BOAT_SPEED = 2.0;   // ≤ 2.5 单位/秒
+      const bv = pingPong(t * BOAT_SPEED, T * 1.0) - T * 0.5;
       const [bx1, bz1] = riverWorld(bv);
-      const [bx2, bz2] = riverWorld(bv + 1);
+      const [bx2, bz2] = riverWorld(bv + 0.5);
       const boatAng = Math.atan2(bx2 - bx1, bz2 - bz1);
+      lastBoatPos = { x: bx1, z: bz1 };
       drawBoat(ctx, bx1, bz1, boatAng);
 
-      const sv = T * 0.6 - ((t * 7) % (T * 1.2));
+      const SPEEDBOAT_SPEED = 2.5;  // ≤ 3 单位/秒
+      const sv = pingPong(t * SPEEDBOAT_SPEED + T * 0.5, T * 1.0) - T * 0.5;
       const [sx1, sz1] = riverWorld(sv);
-      const [sx2, sz2] = riverWorld(sv - 1);
+      const [sx2, sz2] = riverWorld(sv + 0.5);
       const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
       drawSpeedboat(ctx, sx1, sz1, sbAng);
 
@@ -1015,6 +1038,9 @@ export function createDynamicLayer(
 
   // 渡轮当前位置缓存（用于 debug）
   let lastFerryPos: { x: number; z: number } | null = null;
+
+  // 帆船当前位置缓存（用于 debug）
+  let lastBoatPos: { x: number; z: number } | null = null;
 
   function _drawFerry(
     ctx: CanvasRenderingContext2D,
@@ -1145,6 +1171,10 @@ export function createDynamicLayer(
     return lastFerryPos;
   }
 
+  function debugBoatPos(): { x: number; z: number } | null {
+    return lastBoatPos;
+  }
+
   return {
     draw,
     hitables: () => [],
@@ -1153,5 +1183,6 @@ export function createDynamicLayer(
     debugCitizenKinds: () => citizens.map(c => c.kind),
     debugTrainPos,
     debugFerryPos,
+    debugBoatPos,
   };
 }

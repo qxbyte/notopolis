@@ -469,3 +469,67 @@ describe('T10 — ferry 两岸 u_signed 正确性', () => {
     expect(net.ferry!.route).toHaveLength(2);
   });
 });
+
+/* ----------------------------------------------------------------
+   T11 — pingPong 无回卷跳变
+   ---------------------------------------------------------------- */
+
+describe('T11 — 船移动连续性（pingPong 无跳变）', () => {
+  it('river 模式下 debugBoatPos 相邻 0.4s 位移 ≤ 2.0 单位', () => {
+    // 使用 plains 主题（river waterStyle）
+    const riverParams = worldParams('boat-test', 50, 50, 80, 80, 'plains');
+    const layer = createDynamicLayer(baseCity, riverParams, 'boat-test', noParks);
+    const m = makeMockCtx();
+
+    let prevPos: { x: number; z: number } | null = null;
+    for (let i = 0; i < 20; i++) {
+      const t = i * 0.4 + 1.0;  // 从 t=1 开始避免 dt=0
+      layer.draw(m.ctx, t);
+      const pos = layer.debugBoatPos();
+      if (pos && prevPos) {
+        const dist = Math.hypot(pos.x - prevPos.x, pos.z - prevPos.z);
+        expect(dist).toBeLessThanOrEqual(2.0 * 0.4 * 3);  // 速度*dt*安全系数3
+      }
+      if (pos) prevPos = pos;
+    }
+    // 至少有一次返回了位置
+    expect(prevPos).not.toBeNull();
+  });
+});
+
+/* ----------------------------------------------------------------
+   T12 — 火车连续性
+   ---------------------------------------------------------------- */
+
+describe('T12 — 火车连续性（有铁路时可见且位移合理）', () => {
+  it('两区连续 draw 20 次，火车位置连续（相邻位移 ≤ 6 单位）', () => {
+    const districtA = makeDistrictOnSide('alpha', -40, -10, 20, 20);
+    const districtB = makeDistrictOnSide('beta', 20, -10, 20, 20);
+    const cityWithDistricts: CityModel = {
+      ...baseCity,
+      districts: [districtA, districtB],
+    };
+    const layer = createDynamicLayer(cityWithDistricts, params, 'traintest2', noParks);
+    const m = makeMockCtx();
+
+    let prevPos: { x: number; z: number } | null = null;
+    let countNotNull = 0;
+
+    for (let i = 0; i < 20; i++) {
+      const t = i * 0.4;
+      layer.draw(m.ctx, t);
+      const pos = layer.debugTrainPos(0);
+      if (pos !== null) {
+        countNotNull++;
+        if (prevPos) {
+          const dist = Math.hypot(pos.x - prevPos.x, pos.z - prevPos.z);
+          // 速度 4.5 单位/秒 × dt 0.4s = 1.8；停站时 dt 累积；加余量 6
+          expect(dist).toBeLessThanOrEqual(6);
+        }
+        prevPos = pos;
+      }
+    }
+    // 至少 10/20 次可见（不全在隧道）
+    expect(countNotNull).toBeGreaterThan(10);
+  });
+});
