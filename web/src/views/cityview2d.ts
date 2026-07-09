@@ -32,6 +32,8 @@ export interface CityViewHandle {
   centerOn(x: number, z: number, zoomPx: number): void;
   /** 兴趣点坐标（park/zoo/wetland 等，调试/截图用） */
   pois: { x: number; z: number; r: number; kind: string }[];
+  /** 第 i 列火车当前车头位置（调试用） */
+  debugTrainPos(i: number): { x: number; z: number } | null;
 }
 
 export function showCity2D(
@@ -285,6 +287,10 @@ export function showCity2D(
     },
 
     pois: painter.pois,
+
+    debugTrainPos(i: number): { x: number; z: number } | null {
+      return dynLayer.debugTrainPos(i);
+    },
 
     perf(): Record<string, number> {
       const sorted = [...frameTimes].sort((a, b) => a - b);

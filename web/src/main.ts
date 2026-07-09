@@ -87,6 +87,7 @@ async function goCity(vault: WorldVault): Promise<void> {
     __notopolis.perf = () => cityHandle.perf();
     __notopolis.centerOn = (x, z, zoomPx) => cityHandle.centerOn(x, z, zoomPx);
     __notopolis.pois = cityHandle.pois;
+    (__notopolis as Record<string, unknown>).debugTrainPos = (i: number) => cityHandle.debugTrainPos(i);
   } finally {
     navigating = false;
   }

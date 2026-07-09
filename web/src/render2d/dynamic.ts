@@ -400,9 +400,9 @@ function drawTrain(
   isEngine: boolean,
   t: number,
 ): void {
-  const w = 0.9;
-  const h = isEngine ? 1.9 : 1.7;
-  const color = isEngine ? '#c0453a' : '#3e6b9e';
+  const w = 1.53;               // 0.9 * 1.7
+  const h = isEngine ? 3.23 : 2.89;  // 1.9*1.7 / 1.7*1.7
+  const color = isEngine ? '#e05540' : '#5284c0';
 
   ctx.save();
   ctx.translate(x, z);
@@ -410,7 +410,7 @@ function drawTrain(
 
   (ctx as unknown as Record<string, unknown>).fillStyle = color;
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.1;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.22;
   ctx.beginPath();
   ctx.roundRect(-w / 2, -h / 2, w, h, 0.15);
   ctx.fill();
@@ -434,10 +434,10 @@ function drawTrain(
     (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
     ctx.beginPath();
-    ctx.arc(0.05, -h / 2 - 0.4 + puff1, 0.18, 0, Math.PI * 2);
+    ctx.arc(0.05, -h / 2 - 0.6 + puff1, 0.27, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(0.05 + puff2 * 0.3, -h / 2 - 0.75 + puff2, 0.12, 0, Math.PI * 2);
+    ctx.arc(0.05 + puff2 * 0.45, -h / 2 - 1.125 + puff2, 0.18, 0, Math.PI * 2);
     ctx.stroke();
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   }
@@ -710,7 +710,7 @@ export function createDynamicLayer(
     }
   }
 
-  // 初始化 1-2 列火车
+  // 初始化列车（数量 = clamp(floor(rails/2), 1, 4)，确定性分散）
   const trainStates: TrainState[] = [];
   const TRAIN_SPEED = 4.5;     // 世界单位/秒
   const TRAIN_STOP_TIME = 2.5; // 站停时间（秒）
@@ -718,26 +718,19 @@ export function createDynamicLayer(
   const N_CARS = 3;            // 车头 + 2节车厢
 
   if (adjList.size >= 2 && net.rails.length > 0) {
-    // 列车 0：从边 0 的 from 节点出发
-    const firstEdge = net.mstEdges[0];
-    trainStates.push({
-      edgeIdx: 0,
-      s: 0,
-      dir: 1,
-      fromNode: firstEdge.from,
-      stopTimer: 0,
-    });
-
-    // 如果有多条边，列车 1：从最后一条边中间出发
-    if (net.rails.length >= 2) {
-      const lastEi = net.rails.length - 1;
-      const lastEdge = net.rails[lastEi];
-      const lastMst = net.mstEdges[lastEi];
+    const numTrains = Math.max(1, Math.min(4, Math.floor(net.rails.length / 2)));
+    for (let i = 0; i < numTrains; i++) {
+      const trainRng = rng0(wsPrefix + ':train:' + i);
+      const edgeIdx = Math.floor(i * net.rails.length / numTrains);
+      const edge = net.rails[edgeIdx];
+      const mstEdge = net.mstEdges[edgeIdx];
+      const s = trainRng() * edge.total * 0.8;
+      const dir: 1 | -1 = trainRng() > 0.5 ? 1 : -1;
       trainStates.push({
-        edgeIdx: lastEi,
-        s: lastEdge.total * 0.5,
-        dir: -1,
-        fromNode: lastMst.to,
+        edgeIdx,
+        s,
+        dir,
+        fromNode: mstEdge.from,
         stopTimer: 0,
       });
     }

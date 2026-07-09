@@ -2309,43 +2309,80 @@ function paintWilderness(
   const isMountain = theme === 'mountain';
   const isHarbor = theme === 'harbor';
 
-  // 候选点生成：80 个
-  const candidates: [number, number][] = [];
-  for (let i = 0; i < 80; i++) {
-    const x = (rng() * 2 - 1) * T * 0.9;
-    const z = (rng() * 2 - 1) * T * 0.9;
+  // 计算聚落群 hull（所有 district polygon bbox 中心的包围盒外扩 60）
+  let hullMinX = Infinity, hullMinZ = Infinity, hullMaxX = -Infinity, hullMaxZ = -Infinity;
+  for (const d of city.districts) {
+    if (d.polygon.length < 2) continue;
+    let dMinX = Infinity, dMinZ = Infinity, dMaxX = -Infinity, dMaxZ = -Infinity;
+    for (const [px, pz] of d.polygon) {
+      dMinX = Math.min(dMinX, px); dMinZ = Math.min(dMinZ, pz);
+      dMaxX = Math.max(dMaxX, px); dMaxZ = Math.max(dMaxZ, pz);
+    }
+    const cx2 = (dMinX + dMaxX) / 2, cz2 = (dMinZ + dMaxZ) / 2;
+    hullMinX = Math.min(hullMinX, cx2); hullMinZ = Math.min(hullMinZ, cz2);
+    hullMaxX = Math.max(hullMaxX, cx2); hullMaxZ = Math.max(hullMaxZ, cz2);
+  }
+  const HULL_PAD = 60;
+  hullMinX -= HULL_PAD; hullMinZ -= HULL_PAD;
+  hullMaxX += HULL_PAD; hullMaxZ += HULL_PAD;
 
-    // 离区团块 > 8
-    let tooClose = false;
-    for (const d of city.districts) {
-      if (d.polygon.length >= 2) {
-        const pd = polyDist(x, z, d.polygon);
-        if (pd < 8) { tooClose = true; break; }
+  // 候选点生成函数（可配置 gapDist，重试时折半）
+  // 当 hull 有效时，直接在 hull 区域内均匀采样以提高效率（T 可能很大而 hull 较小）
+  const hullValid = hullMaxX > hullMinX && hullMaxZ > hullMinZ;
+  function generateCandidates(gapDist: number, count: number): [number, number][] {
+    const result: [number, number][] = [];
+    for (let i = 0; i < count; i++) {
+      let x: number, z: number;
+      if (hullValid) {
+        // 直接在 hull 范围内采样，避免 T 很大时命中率极低
+        x = hullMinX + rng() * (hullMaxX - hullMinX);
+        z = hullMinZ + rng() * (hullMaxZ - hullMinZ);
+      } else {
+        x = (rng() * 2 - 1) * T * 0.9;
+        z = (rng() * 2 - 1) * T * 0.9;
       }
-    }
-    if (tooClose) continue;
 
-    // 离水 > 8
-    if (params.waterStyle === 'sea' && params.seaData) {
-      if (params.seaData.coastDist(x, z) < 8) continue;
-    } else {
-      if (riverDist(x, z) < RIVER_W + 8) continue;
-    }
-
-    // 离铁路折线 > 4
-    let nearRail = false;
-    for (const edge of transport.rails) {
-      if (edge.pts.length >= 2) {
-        const pd = polyDist(x, z, edge.pts);
-        if (pd < 4) { nearRail = true; break; }
+      // 离区团块 > gapDist
+      let tooClose = false;
+      for (const d of city.districts) {
+        if (d.polygon.length >= 2) {
+          const pd = polyDist(x, z, d.polygon);
+          if (pd < gapDist) { tooClose = true; break; }
+        }
       }
+      if (tooClose) continue;
+
+      // 离水 > gapDist
+      if (params.waterStyle === 'sea' && params.seaData) {
+        if (params.seaData.coastDist(x, z) < gapDist) continue;
+      } else {
+        if (riverDist(x, z) < RIVER_W + gapDist) continue;
+      }
+
+      // 离铁路折线 > 4（始终保持）
+      let nearRail = false;
+      for (const edge of transport.rails) {
+        if (edge.pts.length >= 2) {
+          const pd = polyDist(x, z, edge.pts);
+          if (pd < 4) { nearRail = true; break; }
+        }
+      }
+      if (nearRail) continue;
+
+      // harbor：海岸方向留空（沙滩空旷）
+      if (isHarbor && params.seaData && params.seaData.coastDist(x, z) < 20) continue;
+
+      result.push([x, z]);
     }
-    if (nearRail) continue;
+    return result;
+  }
 
-    // harbor：海岸方向留空（沙滩空旷）
-    if (isHarbor && params.seaData && params.seaData.coastDist(x, z) < 20) continue;
-
-    candidates.push([x, z]);
+  let candidates = generateCandidates(8, 80);
+  if (candidates.length < 6 && city.districts.length >= 4) {
+    candidates = [...candidates, ...generateCandidates(4, 40)];
+    if (candidates.length < 6) {
+      candidates = [...candidates, ...generateCandidates(2, 40)];
+    }
   }
 
   if (candidates.length === 0) return;
@@ -2471,8 +2508,9 @@ function paintWilderness(
     }
   }
 
-  // 大公园：1-2 个
-  const parkCount = 1 + Math.floor(rng() * 2);
+  // 大公园：保底 districts≥4 时 ≥2，否则 1-2 个
+  const minPark = city.districts.length >= 4 ? 2 : 1;
+  const parkCount = Math.max(minPark, 1 + Math.floor(rng() * 2));
   for (let pi = 0; pi < parkCount; pi++) {
     if (candidates.length === 0) break;
     const candidateIdx = (meadowCount + forestPatchCount + pi) % candidates.length;
@@ -2517,10 +2555,12 @@ function paintWilderness(
     ctx.stroke();
   }
 
-  // 动物园：0-2 处（rng 决定，candidates 足够时出现）
+  // 动物园：districts≥4 时保底 1 个，否则 0-2 个
+  const minZoo = city.districts.length >= 4 ? 1 : 0;
+  const availableForZoo = Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount);
   const zooCount = Math.min(
-    Math.floor(rng() * 3), // 0-2
-    Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount),
+    Math.max(minZoo, Math.floor(rng() * 3)), // 保底 minZoo
+    availableForZoo,
   );
   for (let zi = 0; zi < zooCount; zi++) {
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zi) % candidates.length;
@@ -2529,10 +2569,12 @@ function paintWilderness(
     paintZoo(ctx, rng, zx, zz, theme);
   }
 
-  // 湿地：0-2 处
+  // 湿地：districts≥4 时保底 1 个，否则 0-2 个
+  const minWetland = city.districts.length >= 4 ? 1 : 0;
+  const availableForWetland = Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount - zooCount);
   const wetlandCount = Math.min(
-    Math.floor(rng() * 3), // 0-2
-    Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount - zooCount),
+    Math.max(minWetland, Math.floor(rng() * 3)), // 保底 minWetland
+    availableForWetland,
   );
   for (let wi2 = 0; wi2 < wetlandCount; wi2++) {
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zooCount + wi2) % candidates.length;
