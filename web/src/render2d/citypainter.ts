@@ -840,17 +840,64 @@ function paintTrees(
 }
 
 /* ------------------------------------------------------------------ */
-/* 主函数                                                               */
+/* 主函数（重构）                                                        */
 /* ------------------------------------------------------------------ */
 
-export function paintCity(
-  world: WorldCanvas,
+export interface CityPainter {
+  hitItems: HitItem[];
+  drawStatic(ctx: CanvasRenderingContext2D): void;
+}
+
+/**
+ * buildCityPainter — 将「绘制指令」与「worldcanvas 承载」解耦。
+ *
+ * drawStatic 可重复调用且输出完全一致：
+ *   - 所有 rng0(seed) 在 drawStatic 内部创建，不依赖外部状态。
+ *   - 传入的 ctx 应已设置好世界坐标变换（由 hiCanvas 或 worldcanvas 负责）。
+ *
+ * hitItems 在数据准备阶段算好，不依赖 draw。
+ */
+export function buildCityPainter(
   city: CityModel,
   params: WorldParams,
   wsPrefix: string,
-): HitItem[] {
-  world.paint((ctx, tileBounds) => {
-    const { minX, minZ, maxX, maxZ } = tileBounds;
+): CityPainter {
+  // 构建 HitItem[]：先 district polygon，后 building circle
+  const hitItems: HitItem[] = [];
+
+  // 街区 polygon（先）
+  for (const district of city.districts) {
+    hitItems.push({
+      kind: 'district',
+      shape: { type: 'polygon', pts: district.polygon },
+      data: { type: 'district', district },
+    });
+  }
+
+  // 建筑 circle（后，hit 倒序 = 建筑最上层优先命中）
+  for (const district of city.districts) {
+    for (const b of district.buildings) {
+      hitItems.push({
+        kind: 'building',
+        shape: { type: 'circle', x: b.x, z: b.z, r: footprintR(b) + 0.5 },
+        data: { type: 'building', b, dir: district.dir },
+      });
+    }
+  }
+
+  // drawStatic：可重复调用，内部自行创建所有 rng
+  // ctx 必须已设置世界坐标变换（世界单位 → 像素）
+  // tileBounds 使用整个城市扩展范围；hiCanvas 路径下 ctx 覆盖完整区域
+  function drawStatic(ctx: CanvasRenderingContext2D): void {
+    // 从 ctx 当前变换反推世界范围（hiCanvas 下为 viewport→world，worldcanvas 下为 tile 范围）
+    // 这里我们使用全城市范围的边界框以保证完整绘制
+    const xs = city.districts.flatMap((d) => [d.x, d.x + d.width]);
+    const zs = city.districts.flatMap((d) => [d.z, d.z + d.depth]);
+    const expand = 130;
+    const minX = (xs.length ? Math.min(...xs) : -60) - expand;
+    const minZ = (zs.length ? Math.min(...zs) : -60) - expand;
+    const maxX = (xs.length ? Math.max(...xs) : 60) + expand;
+    const maxZ = (zs.length ? Math.max(...zs) : 60) + expand;
 
     // 层 1 — 纸底
     const bgRng = rng0(wsPrefix + ':bg');
@@ -889,30 +936,22 @@ export function paintCity(
 
     // 层 8 — 树木
     paintTrees(ctx, city.districts, wsPrefix);
-  });
-
-  // 构建 HitItem[]：先 district polygon，后 building circle
-  const hits: HitItem[] = [];
-
-  // 街区 polygon（先）
-  for (const district of city.districts) {
-    hits.push({
-      kind: 'district',
-      shape: { type: 'polygon', pts: district.polygon },
-      data: { type: 'district', district },
-    });
   }
 
-  // 建筑 circle（后，hit 倒序 = 建筑最上层优先命中）
-  for (const district of city.districts) {
-    for (const b of district.buildings) {
-      hits.push({
-        kind: 'building',
-        shape: { type: 'circle', x: b.x, z: b.z, r: footprintR(b) + 0.5 },
-        data: { type: 'building', b, dir: district.dir },
-      });
-    }
-  }
+  return { hitItems, drawStatic };
+}
 
-  return hits;
+/**
+ * paintCity — 向后兼容的旧 API。
+ * 内部用 buildCityPainter 实现；现有测试不需改动。
+ */
+export function paintCity(
+  world: WorldCanvas,
+  city: CityModel,
+  params: WorldParams,
+  wsPrefix: string,
+): HitItem[] {
+  const painter = buildCityPainter(city, params, wsPrefix);
+  world.paint((ctx) => painter.drawStatic(ctx));
+  return painter.hitItems;
 }

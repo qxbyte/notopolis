@@ -5,7 +5,8 @@
 
 import { worldParams } from '../world/params';
 import { createWorldCanvas } from '../render2d/worldcanvas';
-import { paintCity } from '../render2d/citypainter';
+import { paintCity, buildCityPainter } from '../render2d/citypainter';
+import type { CityPainter } from '../render2d/citypainter';
 import { createDynamicLayer } from '../render2d/dynamic';
 import { createCamera2D } from '../render2d/camera2d';
 import { hitTest } from '../render2d/hit';
@@ -15,6 +16,9 @@ import { createCards } from '../ui/cards';
 import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
+
+/** 基础 ppu（8px/世界单位）× 1.15：超过此缩放比例时启用高清矢量重绘 */
+const HI_THRESHOLD = 8 * 1.15;
 
 export interface CityViewHandle {
   dispose(): void;
@@ -77,9 +81,12 @@ export function showCity2D(
   // ---- 4. 离屏世界画布（8 ppu）----
   const world = createWorldCanvas(expandedBounds, 8);
 
-  // ---- 5. 绘制静态城市（一次性）----
+  // ---- 5. 构建城市 painter 并绘制到低分辨率 worldcanvas ----
   const paintStart = performance.now();
-  const hitItems: HitItem[] = paintCity(world, city, params, wsPrefix);
+  const painter: CityPainter = buildCityPainter(city, params, wsPrefix);
+  const hitItems: HitItem[] = painter.hitItems;
+  // 低分辨率离屏 blit（8ppu 质量，交互流畅用）
+  world.paint((ctx) => painter.drawStatic(ctx));
   const paintMs = Math.round((performance.now() - paintStart) * 10) / 10;
 
   // ---- 6. 公园列表（供动态层）----
@@ -115,8 +122,46 @@ export function showCity2D(
 
   const ctx = canvas.getContext('2d')!;
 
+  // ---- 8b. 高清矢量层 canvas（与主 canvas 同尺寸）----
+  // 当 camera.zoom > HI_THRESHOLD（8×1.15 device-px/世界单位）时，
+  // 镜头静止后用原生分辨率矢量重绘，避免 blit 拉伸模糊。
+  let hiCanvas = document.createElement('canvas');
+  hiCanvas.width = canvas.width;
+  hiCanvas.height = canvas.height;
+  let hiCtx = hiCanvas.getContext('2d')!;
+  let hiValid = false;   // true = hiCanvas 内容有效，可直接 blit
+  let hiMs = 0;          // 最近一次 settle 渲染耗时（ms）
+  let hiSettleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 执行一次 settle 渲染：清空 hiCanvas → setTransform → drawStatic */
+  function doSettleRender(): void {
+    const t0 = performance.now();
+    hiCtx.setTransform(1, 0, 0, 1, 0, 0);
+    hiCtx.clearRect(0, 0, hiCanvas.width, hiCanvas.height);
+    // 应用与主画布相机一致的世界坐标变换
+    camera.apply(hiCtx);
+    painter.drawStatic(hiCtx);
+    hiMs = Math.round((performance.now() - t0) * 10) / 10;
+    hiValid = true;
+  }
+
+  /** 每次相机变化：失效 hiCanvas，防抖 160ms 后执行 settle 渲染 */
+  function scheduleSettle(): void {
+    hiValid = false;
+    if (hiSettleTimer !== null) clearTimeout(hiSettleTimer);
+    hiSettleTimer = setTimeout(() => {
+      hiSettleTimer = null;
+      if (camera.zoom > HI_THRESHOLD) {
+        doSettleRender();
+      }
+    }, 160);
+  }
+
   // ---- 9. 相机（初始 fit 城市 bbox，平移钳制用大世界 bounds）----
   const camera = createCamera2D(canvas, expandedBounds, cityFitBounds);
+
+  // 注册相机变化监听
+  camera.onChange(scheduleSettle);
 
   // ---- 10. HUD + 返回按钮 ----
   const hud = createHUD(container);
@@ -160,8 +205,17 @@ export function showCity2D(
     ctx.fillStyle = PAPER.paper;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // blit 内部会调用 camera.apply，绘制完毕后 camera transform 保持激活
-    world.blit(ctx, camera);
+    if (hiValid && camera.zoom > HI_THRESHOLD) {
+      // 高清矢量层有效：直接 blit hiCanvas（像素对像素，无缩放）
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(hiCanvas, 0, 0);
+      // 动态层仍在相机变换下以世界坐标绘制
+      camera.apply(ctx);
+    } else {
+      // 低分辨率 blit（交互中或 zoom 未超阈值）
+      // blit 内部会调用 camera.apply，绘制完毕后 camera transform 保持激活
+      world.blit(ctx, camera);
+    }
 
     // 动态层在 camera transform 下以世界坐标绘制
     dynLayer.draw(ctx, t * 0.001);
@@ -219,6 +273,13 @@ export function showCity2D(
   function onResize(): void {
     canvas.width  = container.clientWidth  * dpr;
     canvas.height = container.clientHeight * dpr;
+    // 重建 hiCanvas 以匹配新的 viewport 尺寸
+    hiCanvas = document.createElement('canvas');
+    hiCanvas.width  = canvas.width;
+    hiCanvas.height = canvas.height;
+    hiCtx = hiCanvas.getContext('2d')!;
+    hiValid = false;
+    scheduleSettle();
   }
   window.addEventListener('resize', onResize);
 
@@ -234,6 +295,7 @@ export function showCity2D(
         fps: avg ? Math.round(1000 / avg) : 0,
         paintMs,
         hitItems: hitItems.length,
+        hiMs,   // 最近一次 settle 渲染耗时（ms），0 表示尚未触发
       };
     },
 
@@ -247,6 +309,10 @@ export function showCity2D(
 
     dispose(): void {
       cancelAnimationFrame(animId);
+      if (hiSettleTimer !== null) {
+        clearTimeout(hiSettleTimer);
+        hiSettleTimer = null;
+      }
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);

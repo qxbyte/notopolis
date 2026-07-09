@@ -6,7 +6,18 @@
 import { createCamera2D } from '../render2d/camera2d';
 import { PAPER } from '../render2d/sketch';
 import { TIER } from '../ui/hud';
+import { rng0 } from '../util/seed';
 import type { WorldVault } from '../api';
+
+/* ------------------------------------------------------------------ */
+/* 预生成噪点坐标（模块内一次，绑定到 [0,1) 均匀分布，绘制时缩放到 bounds）  */
+/* ------------------------------------------------------------------ */
+const NOISE_COUNT = 1200;
+const _noiseRng = rng0('worldmap:noise');
+const _noiseCoords: [number, number][] = Array.from({ length: NOISE_COUNT }, () => [
+  _noiseRng(),
+  _noiseRng(),
+]);
 
 export interface WorldMap2DHandle {
   dispose(): void;
@@ -160,11 +171,11 @@ function drawBackground(
   ctx.fillStyle = PAPER.paper;
   ctx.fillRect(minX, minZ, w, h);
 
-  // 轻微噪点质感
+  // 轻微噪点质感（使用预生成的确定性坐标，避免每帧闪烁）
   ctx.fillStyle = 'rgba(90,80,60,0.03)';
-  for (let i = 0; i < 1200; i++) {
-    const nx = minX + Math.random() * w;
-    const nz = minZ + Math.random() * h;
+  for (let i = 0; i < NOISE_COUNT; i++) {
+    const nx = minX + _noiseCoords[i][0] * w;
+    const nz = minZ + _noiseCoords[i][1] * h;
     ctx.fillRect(nx, nz, 1, 1);
   }
 
