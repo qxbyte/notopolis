@@ -90,6 +90,11 @@ describe('worldParams — harbor coastDist', () => {
     expect(p.seaData!.piers.length).toBeGreaterThanOrEqual(2);
     expect(p.seaData!.piers.length).toBeLessThanOrEqual(3);
   });
+
+  it('harbor: canalPts 为空数组', () => {
+    const p = worldParams('vault-harbor', HW, HD, WR, T, 'harbor');
+    expect(p.canalPts).toEqual([]);
+  });
 });
 
 describe('worldParams — snow/mountain mountains', () => {

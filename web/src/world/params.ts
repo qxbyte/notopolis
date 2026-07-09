@@ -212,6 +212,8 @@ export function worldParams(
       });
     }
     seaData = { sideAngle, coastPts, coastDist, islands, lighthousePos, piers };
+    // harbor 主题：运河置空（无内陆运河，只有入海河道）
+    canalPts.length = 0;
   }
 
   // snow 主题：所有湖标记 frozen
