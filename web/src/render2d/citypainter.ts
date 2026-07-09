@@ -1264,7 +1264,7 @@ function paintTrees(
     }
 
     const area = district.width * district.depth;
-    const treeCount = Math.max(2, Math.floor(area / 40));
+    const treeCount = Math.max(1, Math.floor(area / 120));
 
     let placed = 0;
     let attempts = 0;

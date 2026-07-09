@@ -150,3 +150,19 @@ describe('T4 — street kind 不产生额外绘制', () => {
     expect(c1.length).toBe(c2.length);
   });
 });
+
+describe('T5 — 聚落内树木减量', () => {
+  it('聚落内树木 quadraticCurveTo 调用数低于旧公式上界', () => {
+    const { world, calls } = makeMockWorld();
+    paintCity(world as never, fixture, params, 'test');
+    // scribbleBlob does exactly 14 quadraticCurveTo per call.
+    // With area/40 (old): distA+distB → max(2,10) + max(2,10) = 10+10 = 20 trees
+    //   → 20 × 14 = 280 from trees alone; total ~2430 with other sources
+    // With area/120 (new): max(1,3) + max(1,3) = 3+3 = 6 trees
+    //   → 6 × 14 = 84 from trees; drop by ~196; total ~2234
+    // We verify the drop happened by asserting new total < midpoint
+    // Old total ~2430, new total ~2234, assert < 2400 to verify new formula in use
+    const qcCount = calls.filter(c => c === 'quadraticCurveTo').length;
+    expect(qcCount).toBeLessThan(2400);
+  });
+});
