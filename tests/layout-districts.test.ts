@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutDistricts, pointInPolygon } from '../src/server/layout/districts.js';
+import { layoutDistricts, pointInPolygon, UNIT_AREA, R_SCALE } from '../src/server/layout/districts.js';
 import { hashSeed, mulberry32 } from '../src/server/layout/rng.js';
 import { placeBuildings } from '../src/server/layout/buildings.js';
 import type { NoteMeta } from '../src/shared/types.js';
@@ -149,6 +149,31 @@ describe('pointInPolygon', () => {
       const farZ = p.z - p.depth * 2;
       expect(pointInPolygon(farX, farZ, p.polygon)).toBe(false);
     }
+  });
+});
+
+describe('边角利用测试', () => {
+  it('10 个目录（各 30 篇）至少 1 个团块中心落在外围带（|x|>0.55×SPREAD_R 或 |z|>0.55×SPREAD_R）', () => {
+    // 造 10 个目录，每个 30 篇笔记
+    const dirs = Array.from({ length: 10 }, (_, i) => ({ dir: `dir-${i.toString().padStart(2, '0')}`, count: 30 }));
+    const plots = layoutDistricts(dirs);
+
+    // 按同公式重算 SPREAD_R
+    const total = dirs.reduce((s, c) => s + c.count, 0);
+    const radii = dirs.map((d) => Math.sqrt((d.count * UNIT_AREA) / Math.PI) * R_SCALE);
+    const maxR = Math.max(...radii);
+    const SPREAD_R = Math.max(Math.sqrt(total * UNIT_AREA) * 0.95, maxR * 2.2);
+
+    const threshold = 0.55 * SPREAD_R;
+
+    // 团块中心（bbox 中心）
+    const hasOuter = plots.some((p) => {
+      const cx = p.x + p.width / 2;
+      const cz = p.z + p.depth / 2;
+      return Math.abs(cx) > threshold || Math.abs(cz) > threshold;
+    });
+
+    expect(hasOuter).toBe(true);
   });
 });
 

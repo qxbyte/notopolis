@@ -9,8 +9,8 @@ export interface Plot {
   polygon: [number, number][];
 }
 
-const UNIT_AREA = 64; // 每篇笔记占据的世界面积（4x4 建筑格 × 4 格余量）
-const R_SCALE = 2.0; // 团块半径系数（区域更舒展，房屋同比放大后仍有留白）
+export const UNIT_AREA = 64; // 每篇笔记占据的世界面积（4x4 建筑格 × 4 格余量）
+export const R_SCALE = 2.0; // 团块半径系数（区域更舒展，房屋同比放大后仍有留白）
 const MIN_GAP = 5; // 旷野最小间隙
 const TARGET_GAP = 8; // 目标间隙（区域大了，间隔相应收小）
 const MAX_CANDIDATES = 80; // 每次散布候选点数
@@ -99,7 +99,7 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
   const radii = items.map((item) => Math.sqrt((item.count * UNIT_AREA) / Math.PI) * R_SCALE);
   const maxR = Math.max(...radii);
 
-  // 世界散布半径
+  // 世界散布半径（正方形边长 2×SPREAD_R，四角均可达）
   const SPREAD_R = Math.max(Math.sqrt(total * UNIT_AREA) * 0.95, maxR * 2.2);
 
   // 已放置中心点集合
@@ -117,37 +117,31 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
     // 消耗3次生成φ1/φ2/φ3，保证多边形确定性
     const rngScatter = mulberry32(hashSeed('scatter:' + item.dir));
 
+    // 每个团块个体化目标间隙：~5 到 ~28 单位不等
+    const targetGap_i = TARGET_GAP * (0.6 + rngScatter() * 2.4);
+
     let cx: number;
     let cz: number;
 
     if (idx === 0) {
-      // 最大的落在离原点 ≤ SPREAD_R*0.25 的种子随机位置
-      const r0 = rngScatter() * SPREAD_R * 0.25;
-      const a0 = rngScatter() * Math.PI * 2;
-      cx = r0 * Math.cos(a0);
-      cz = r0 * Math.sin(a0);
+      // 第一个团块在正方形中央 60% 区域内随机种子（即 [-0.3,0.3]×SPREAD_R）
+      cx = (rngScatter() - 0.5) * 2 * SPREAD_R * 0.3;
+      cz = (rngScatter() - 0.5) * 2 * SPREAD_R * 0.3;
     } else {
       // 生成候选点，使用目标间隙策略
       let bestCx = 0;
       let bestCz = 0;
       let bestGap = -Infinity;
 
-      // 目标间隙候选（gap ≥ MIN_GAP，选 |gap - TARGET_GAP| 最小者）
+      // 目标间隙候选（gap ≥ MIN_GAP，选 |gap - targetGap_i| 最小者）
       let bestTargetCx = 0;
       let bestTargetCz = 0;
       let bestTargetDist = Infinity;
 
       for (let c = 0; c < MAX_CANDIDATES; c++) {
-        // 均匀撒在半径 SPREAD_R 圆内（拒绝采样 → 均匀分布）
-        let candX: number;
-        let candZ: number;
-        let u: number, v: number;
-        do {
-          u = rngScatter() * 2 - 1;
-          v = rngScatter() * 2 - 1;
-        } while (u * u + v * v > 1);
-        candX = u * SPREAD_R;
-        candZ = v * SPREAD_R;
+        // 均匀撒在边长 2×SPREAD_R 的正方形内（四角可达）
+        const candX = (rngScatter() * 2 - 1) * SPREAD_R;
+        const candZ = (rngScatter() * 2 - 1) * SPREAD_R;
 
         // 与所有已放置团块的最小间隙
         let minGap = Infinity;
@@ -164,9 +158,9 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
           bestCz = candZ;
         }
 
-        // 目标间隙策略：gap ≥ MIN_GAP 时，选 |gap - TARGET_GAP| 最小者
+        // 目标间隙策略：gap ≥ MIN_GAP 时，选 |gap - targetGap_i| 最小者
         if (minGap >= MIN_GAP) {
-          const targetDist = Math.abs(minGap - TARGET_GAP);
+          const targetDist = Math.abs(minGap - targetGap_i);
           if (targetDist < bestTargetDist) {
             bestTargetDist = targetDist;
             bestTargetCx = candX;
