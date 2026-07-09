@@ -46,7 +46,7 @@ function lerpHex(a: string, b: string, t: number): string {
 /* ------------------------------------------------------------------ */
 
 function footprintR(b: Building): number {
-  return b.size === 1 ? 1.1 : b.size === 2 ? 1.4 : 1.7;
+  return b.size === 1 ? 1.5 : b.size === 2 ? 1.9 : 2.3;
 }
 
 /* ------------------------------------------------------------------ */
