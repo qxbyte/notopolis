@@ -45,6 +45,15 @@ export async function fetchNote(id: string, relPath: string): Promise<string> {
   return data.markdown;
 }
 
+/** 保存笔记原文（覆盖已存在的 .md） */
+export async function saveNote(id: string, relPath: string, markdown: string): Promise<void> {
+  await apiFetch(`/api/note/${id}?path=${encodeURIComponent(relPath)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown }),
+  });
+}
+
 export async function addVault(name: string, path: string, theme: string): Promise<VaultConfig> {
   const res = await apiFetch('/api/vaults', {
     method: 'POST',

@@ -104,7 +104,12 @@ async function goWorldMap(): Promise<void> {
   }
 }
 
-async function goCity(vault: WorldVault, restoreTaskPanel = false, summary = false): Promise<void> {
+async function goCity(
+  vault: WorldVault,
+  restoreTaskPanel = false,
+  summary = false,
+  restoreNote: string | null = null,
+): Promise<void> {
   if (navigating) return;
   navigating = true;
   try {
@@ -114,6 +119,7 @@ async function goCity(vault: WorldVault, restoreTaskPanel = false, summary = fal
     const cityHandle: CityViewHandle = showCity2D(container, vault, city, goWorldMap);
     current = cityHandle;
     if (restoreTaskPanel) cityHandle.openTaskPanel();
+    if (restoreNote) cityHandle.openNote(restoreNote);
     if (summary) void showVisitSummary(vault.id, cityHandle);
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
@@ -139,6 +145,7 @@ async function goCity(vault: WorldVault, restoreTaskPanel = false, summary = fal
     dbg.navigateLink = (p: string) => cityHandle.navigateLink(p);
     dbg.randomWalk = () => cityHandle.randomWalk();
     dbg.exportPoster = () => cityHandle.exportPoster();
+    dbg.openNote = (p: string) => cityHandle.openNote(p);
   } finally {
     navigating = false;
   }
@@ -165,12 +172,16 @@ document.addEventListener('keydown', (e) => {
 
 connectWS(async (vaultId: string) => {
   if (currentVaultId === vaultId) {
-    // 整城重建前记录工地面板开关，重建后恢复（勾任务后面板不该消失）
-    const h = current as unknown as { taskPanelOpen?: () => boolean } | null;
+    // 整城重建前记录面板/弹窗状态，重建后恢复（保存笔记触发重建时不该丢弹窗）
+    const h = current as unknown as {
+      taskPanelOpen?: () => boolean;
+      noteModalPath?: () => string | null;
+    } | null;
     const wasTaskPanelOpen = h?.taskPanelOpen?.() === true;
+    const openNote = h?.noteModalPath?.() ?? null;
     const { vaults } = await fetchWorld();
     const vault = vaults.find((v) => v.id === vaultId);
-    if (vault) await goCity(vault, wasTaskPanelOpen);
+    if (vault) await goCity(vault, wasTaskPanelOpen, false, openNote);
   }
 });
 

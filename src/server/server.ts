@@ -1,6 +1,6 @@
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, makeVault, saveConfig } from './config.js';
 import { buildGraph } from './graph.js';
@@ -99,6 +99,33 @@ export async function createServer(): Promise<{
       return { markdown: await readFile(abs, 'utf8') };
     } catch {
       return reply.code(404).send({ error: 'note not found' });
+    }
+  });
+
+  // 保存笔记原文（仅覆盖 vault 内已存在的 .md，路径穿越防护同 GET）
+  app.put('/api/note/:vaultId', async (req, reply) => {
+    const { vaultId } = req.params as { vaultId: string };
+    const rel = (req.query as { path?: string }).path;
+    const body = req.body as { markdown?: string };
+    const cfg = await loadConfig();
+    const vault = cfg.vaults.find((v) => v.id === vaultId);
+    if (!vault || !rel) return reply.code(404).send({ error: 'not found' });
+    if (typeof body?.markdown !== 'string') return reply.code(400).send({ error: 'markdown required' });
+    if (!rel.endsWith('.md')) return reply.code(400).send({ error: 'only .md allowed' });
+    const rootAbs = path.resolve(vault.path);
+    const abs = path.resolve(vault.path, rel);
+    if (!abs.startsWith(rootAbs + path.sep)) return reply.code(400).send({ error: 'invalid path' });
+    try {
+      const s = await stat(abs);
+      if (!s.isFile()) return reply.code(400).send({ error: 'not a file' });
+    } catch {
+      return reply.code(404).send({ error: 'note not found' }); // 只允许改已存在的笔记
+    }
+    try {
+      await writeFile(abs, body.markdown, 'utf8');
+      return { ok: true };
+    } catch (e) {
+      return reply.code(500).send({ error: String(e) });
     }
   });
 

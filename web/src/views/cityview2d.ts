@@ -13,6 +13,8 @@ import { hitTest } from '../render2d/hit';
 import type { HitItem } from '../render2d/hit';
 import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
+import { createNoteModal } from '../ui/notemodal';
+import { fetchNote, saveNote } from '../api';
 import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
@@ -71,6 +73,10 @@ export interface CityViewHandle {
   randomWalk(): string | null;
   /** 导出城市海报 PNG，返回 blob 字节数（失败返回 0） */
   exportPoster(): Promise<number>;
+  /** 打开笔记查看/编辑弹窗 */
+  openNote(notePath: string): void;
+  /** 当前打开的笔记路径（WS 重建恢复用；未打开返回 null） */
+  noteModalPath(): string | null;
 }
 
 export function showCity2D(
@@ -269,8 +275,12 @@ export function showCity2D(
     container.appendChild(labelEl);
   }
 
-  // ---- 12. 信息卡 ----
+  // ---- 12. 信息卡 + 笔记弹窗 ----
   const cards = createCards(container);
+  const noteModal = createNoteModal(container, {
+    fetchMarkdown: (vaultId, notePath) => fetchNote(vaultId, notePath),
+    saveMarkdown: (vaultId, notePath, md) => saveNote(vaultId, notePath, md),
+  });
 
   // ---- 12b. 搜索（⌘K）----
   const searchItems: SearchItem[] = [];
@@ -569,9 +579,11 @@ export function showCity2D(
     return { inFrom, outTo, onNavigate: (p) => navigateLink(p) };
   }
 
-  // 展示建筑卡片（带链接段），供点击/搜索/定位/漫游共用
+  // 展示建筑卡片（带链接段 + 「打开」弹窗），供点击/搜索/定位/漫游共用
   function showBuildingCard(b: import('@shared/types').Building, dir: string): void {
-    cards.showBuilding(b, dir, vault.path, linksFor(b.notePath));
+    cards.showBuilding(b, dir, vault.path, linksFor(b.notePath), (notePath) =>
+      noteModal.open(vault.id, notePath, b.title),
+    );
   }
 
   // 按 notePath 拾取建筑并展示信息卡（不移动镜头）
@@ -684,6 +696,13 @@ export function showCity2D(
     exportPoster(): Promise<number> {
       return doExportPoster();
     },
+    openNote(notePath: string): void {
+      const hit = buildingIndex.get(notePath);
+      noteModal.open(vault.id, notePath, hit?.b.title ?? notePath);
+    },
+    noteModalPath(): string | null {
+      return noteModal.currentPath();
+    },
 
     pois: painter.pois,
 
@@ -731,6 +750,7 @@ export function showCity2D(
       searchUI.dispose();
       taskPanel.dispose();
       gardenPanel.dispose();
+      noteModal.dispose();
       hud.dispose();
       const card = container.querySelector('#card');
       if (card) card.remove();

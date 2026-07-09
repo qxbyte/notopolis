@@ -5,6 +5,7 @@
 
 import type { Building, District } from '@shared/types';
 import { obsidianUri } from './obsidian';
+import { renderMarkdown } from '../util/markdown';
 
 /**
  * HTML 转义（4 字符：& < > "），同时导出供外部使用。
@@ -26,7 +27,13 @@ export interface CardLinks {
 }
 
 export interface CardsHandle {
-  showBuilding(b: Building, dir: string, vaultAbsPath: string, links?: CardLinks): void;
+  showBuilding(
+    b: Building,
+    dir: string,
+    vaultAbsPath: string,
+    links?: CardLinks,
+    onOpen?: (notePath: string) => void,
+  ): void;
   showDistrict(d: District, now: number): void;
   hide(): void;
 }
@@ -38,13 +45,21 @@ export function createCards(parent: HTMLElement): CardsHandle {
 
   const DAY = 86400000;
 
-  // 记录当前卡片的链接跳转回调（onNavigate），供 data-nav 行点击调用
+  // 当前卡片的回调 + 目标（供链接漫游与「打开」按钮）
   let navHandler: ((path: string) => void) | null = null;
+  let openHandler: ((path: string) => void) | null = null;
+  let curPath = '';
   function onCardClick(e: MouseEvent): void {
-    const row = (e.target as HTMLElement).closest<HTMLElement>('.card-link[data-nav]');
-    if (!row || !navHandler) return;
-    const p = row.getAttribute('data-nav');
-    if (p) navHandler(p);
+    const el = e.target as HTMLElement;
+    if (el.closest('.card-open') && openHandler && curPath) {
+      openHandler(curPath);
+      return;
+    }
+    const row = el.closest<HTMLElement>('.card-link[data-nav]');
+    if (row && navHandler) {
+      const p = row.getAttribute('data-nav');
+      if (p) navHandler(p);
+    }
   }
   card.addEventListener('click', onCardClick);
 
@@ -66,18 +81,30 @@ export function createCards(parent: HTMLElement): CardsHandle {
   }
 
   return {
-    showBuilding(b: Building, dir: string, vaultAbsPath: string, links?: CardLinks): void {
+    showBuilding(
+      b: Building,
+      dir: string,
+      vaultAbsPath: string,
+      links?: CardLinks,
+      onOpen?: (notePath: string) => void,
+    ): void {
       const date = new Date(b.mtimeMs).toLocaleDateString('zh-CN');
       const uri = obsidianUri(vaultAbsPath, b.notePath);
       const prefix = b.isCivic ? '🏛 ' : b.landmark ? '⭐ ' : '';
       navHandler = links?.onNavigate ?? null;
+      openHandler = onOpen ?? null;
+      curPath = b.notePath;
+      const excerptHtml = b.excerpt ? renderMarkdown(b.excerpt) : '<p>（无摘要）</p>';
       card.innerHTML = `
         <button class="close" onclick="this.parentElement.style.display='none'">✕</button>
         <h3>${prefix}${esc(b.title)}</h3>
         <div class="meta">📁 ${esc(dir || '(根目录)')} · ${b.wordCount} 字 · 被引 ${b.inlinks} · 待办 ${b.openTasks}<br>🕐 最后编辑 ${date}</div>
-        <div class="excerpt">${esc(b.excerpt || '（无摘要）')}</div>
+        <div class="excerpt md-body">${excerptHtml}</div>
         ${links ? linkSection(links) : ''}
-        <div class="actions"><a href="${uri}">在 Obsidian 打开</a></div>`;
+        <div class="actions">
+          ${onOpen ? '<button class="card-open">打开</button>' : ''}
+          <a href="${uri}">在 Obsidian 打开</a>
+        </div>`;
       card.style.display = 'block';
     },
 
