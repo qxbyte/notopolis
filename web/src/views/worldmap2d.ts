@@ -3,7 +3,6 @@
  * 2D 世界地图视图 — 羊皮纸风格，城邦印章布局。
  */
 
-import { createCamera2D } from '../render2d/camera2d';
 import { PAPER } from '../render2d/sketch';
 import { TIER } from '../ui/hud';
 import { rng0 } from '../util/seed';
@@ -253,8 +252,22 @@ export function showWorldMap2D(
     container.appendChild(manageBtn);
   }
 
-  // ---- 相机 ----
-  const camera = createCamera2D(canvas, bounds);
+  // ---- 固定视角（无缩放/平移）：contain 适配窗口，一屏展示全貌 ----
+  let scale = 1;
+  let offX = 0;
+  let offY = 0;
+  function computeTransform(): void {
+    const w = bounds.maxX - bounds.minX;
+    const h = bounds.maxZ - bounds.minZ;
+    scale = Math.min(canvas.width / w, canvas.height / h) * 0.94;
+    offX = canvas.width / 2;
+    offY = canvas.height / 2;
+  }
+  computeTransform();
+
+  function screenToWorld(sx: number, sy: number): [number, number] {
+    return [(sx - offX) / scale, (sy - offY) / scale];
+  }
 
   // ---- 城邦位置（环形布局）----
   const radius = Math.min(Math.max(80, vaults.length * 30), 160);
@@ -310,8 +323,7 @@ export function showWorldMap2D(
 
   // ---- 点击 ----
   function onClick(e: MouseEvent): void {
-    if (camera.consumeDragMoved()) return;
-    const [wx, wz] = camera.screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
+    const [wx, wz] = screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     const idx = findVaultAt(wx, wz);
     if (idx < 0) return;
     const vault = vaults[idx];
@@ -329,7 +341,7 @@ export function showWorldMap2D(
 
   // ---- Hover ----
   function onMouseMove(e: MouseEvent): void {
-    const [wx, wz] = camera.screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
+    const [wx, wz] = screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     const idx = findVaultAt(wx, wz);
     if (idx < 0) {
       tooltip.style.display = 'none';
@@ -358,8 +370,8 @@ export function showWorldMap2D(
     ctx.fillStyle = PAPER.paper;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 应用相机变换
-    camera.apply(ctx);
+    // 应用固定变换（世界原点居中，contain 缩放）
+    ctx.setTransform(scale, 0, 0, scale, offX, offY);
 
     // 背景（在世界坐标下绘制）
     drawBackground(ctx, bounds);
@@ -385,17 +397,21 @@ export function showWorldMap2D(
       const pos = vaultPositions[i];
       drawStamp(ctx, pos.x, pos.z, vaults[i]);
 
-      // 城邦名称标签（世界坐标下绘制，需要逆缩放以保持字体大小一致）
-      const zoom = camera.zoom;
+      // 城邦名称标签（印章下方；逆缩放绘制，字号按 CSS 像素 × dpr 保证清晰可读）
+      const labelPx = 18 * dpr;
       ctx.save();
       ctx.translate(pos.x, pos.z);
-      ctx.scale(1 / zoom, 1 / zoom);
-      ctx.fillStyle = PAPER.ink;
-      ctx.font = `13px 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', cursive`;
+      ctx.scale(1 / scale, 1 / scale);
+      ctx.font = `600 ${labelPx}px 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', cursive`;
       ctx.textAlign = 'center';
-      // 调整为印章下方
       const stampH = hitRadius(vaults[i].tier) + 6;
-      ctx.fillText(vaults[i].name, 0, stampH * zoom);
+      const labelY = stampH * scale + labelPx * 0.4;
+      // 纸色描边打底，避免与贸易路线虚线交叠时看不清
+      ctx.strokeStyle = PAPER.paper;
+      ctx.lineWidth = labelPx * 0.22;
+      ctx.strokeText(vaults[i].name, 0, labelY);
+      ctx.fillStyle = PAPER.ink;
+      ctx.fillText(vaults[i].name, 0, labelY);
       ctx.restore();
     }
 
@@ -408,6 +424,7 @@ export function showWorldMap2D(
   function onResize(): void {
     canvas.width  = container.clientWidth  * dpr;
     canvas.height = container.clientHeight * dpr;
+    computeTransform();
   }
   window.addEventListener('resize', onResize);
 
@@ -417,7 +434,6 @@ export function showWorldMap2D(
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('resize', onResize);
-      camera.dispose();
       canvas.remove();
       tooltip.remove();
       errTip.remove();
