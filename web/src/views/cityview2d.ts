@@ -76,7 +76,7 @@ export function showCity2D(
 
   // ---- 3. 世界参数 ----
   const wsPrefix = 'world:' + vault.path;
-  const params = worldParams(vault.path, cityHalfW, cityHalfD, worldR, T);
+  const params = worldParams(vault.path, cityHalfW, cityHalfD, worldR, T, city.theme);
 
   // ---- 4. 离屏世界画布（8 ppu）----
   const world = createWorldCanvas(expandedBounds, 8);
