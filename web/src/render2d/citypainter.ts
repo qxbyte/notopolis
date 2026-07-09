@@ -762,13 +762,16 @@ function paintDistricts(
   ctx: CanvasRenderingContext2D,
   districts: District[],
   wsPrefix: string,
+  theme: string = 'plains',
 ): void {
   for (const district of districts) {
     const rng = rng0(wsPrefix + ':dist:' + district.dir);
     const poly = district.polygon;
 
     // 街区 pastel 填充
-    const pastelColor = PAPER.pastels[hashStr(district.dir) % 6];
+    const rawPastel = PAPER.pastels[hashStr(district.dir) % 6];
+    const biomeD = getBiome(theme);
+    const pastelColor = biomeD.pastelShift ? biomeD.pastelShift(rawPastel, rng) : rawPastel;
     (ctx as unknown as Record<string, unknown>).fillStyle = pastelColor;
     (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
     ctx.beginPath();
@@ -1157,6 +1160,71 @@ function paintBuildings(
 }
 
 /* ------------------------------------------------------------------ */
+/* 针叶树（sparse-pine / dense-pine）                                   */
+/* ------------------------------------------------------------------ */
+
+function paintPineTree(
+  ctx: CanvasRenderingContext2D,
+  rng: () => number,
+  tx: number,
+  tz: number,
+  h: number,
+  withSnow: boolean,
+): void {
+  // 树干
+  const trunkH = h * 0.4;
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+  ctx.beginPath();
+  ctx.moveTo(tx, tz + trunkH * 0.5);
+  ctx.lineTo(tx, tz + trunkH);
+  ctx.stroke();
+
+  // 3 层三角形叶冠（从上到下递宽）
+  const layerCount = 3;
+  for (let li = 0; li < layerCount; li++) {
+    const ly = tz - h * 0.7 + li * (h * 0.3);
+    const lw = h * 0.2 + li * h * 0.15;
+    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(tx, ly);
+    ctx.lineTo(tx - lw, ly + h * 0.25);
+    ctx.lineTo(tx + lw, ly + h * 0.25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+
+  // 雪：顶部留白 + 树下雪堆弧
+  if (withSnow) {
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+    // 顶部雪帽
+    const snowTipY = tz - h * 0.7;
+    const snowW = h * 0.12;
+    ctx.beginPath();
+    ctx.moveTo(tx, snowTipY);
+    ctx.lineTo(tx - snowW, snowTipY + h * 0.15);
+    ctx.lineTo(tx + snowW, snowTipY + h * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    // 树下雪堆弧
+    const snowBaseW = h * 0.25;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#c8d8e8';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+    ctx.beginPath();
+    ctx.moveTo(tx - snowBaseW, tz + trunkH * 0.3);
+    ctx.quadraticCurveTo(tx, tz + trunkH * 0.3 - h * 0.1, tx + snowBaseW, tz + trunkH * 0.3);
+    ctx.stroke();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 层 8 — 树木                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -1164,7 +1232,12 @@ function paintTrees(
   ctx: CanvasRenderingContext2D,
   districts: District[],
   wsPrefix: string,
+  theme: string = 'plains',
 ): void {
+  const biomeT = getBiome(theme);
+  const vegKind = biomeT.vegetation.kind;
+  const withSnow = theme === 'snow';
+
   for (const district of districts) {
     const rng = rng0(wsPrefix + ':deco:' + district.dir);
     const poly = district.polygon;
@@ -1204,26 +1277,202 @@ function paintTrees(
 
       const tr = 1.5 + rng() * 1.0; // 1.5-2.5
 
-      // 树冠（一次 beginPath，fill 与 stroke 共享同一路径）
-      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
-      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
-      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
-      scribbleBlob(ctx, rng, tx, tz, tr);
-      ctx.fill();
-      ctx.stroke();
-      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-
-      // 树干（短竖线 2-3 个单位高）
-      const trunkH = 2 + rng();
-      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
-      ctx.beginPath();
-      ctx.moveTo(tx, tz);
-      ctx.lineTo(tx, tz + trunkH);
-      ctx.stroke();
+      if (vegKind === 'mixed' || vegKind === 'palm-ish') {
+        // 圆团型（原有实现）
+        (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+        scribbleBlob(ctx, rng, tx, tz, tr);
+        ctx.fill();
+        ctx.stroke();
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+        // 树干
+        const trunkH2 = 2 + rng();
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+        ctx.beginPath();
+        ctx.moveTo(tx, tz);
+        ctx.lineTo(tx, tz + trunkH2);
+        ctx.stroke();
+      } else {
+        // sparse-pine / dense-pine：三角松
+        paintPineTree(ctx, rng, tx, tz, tr * 2.2, withSnow);
+      }
 
       placed++;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 层 9 — 专属元素（extras）                                            */
+/* ------------------------------------------------------------------ */
+
+function paintExtras(
+  ctx: CanvasRenderingContext2D,
+  params: WorldParams,
+  city: CityModel,
+  wsPrefix: string,
+  minX: number, minZ: number, maxX: number, maxZ: number,
+): void {
+  const biomeE = getBiome(city.theme);
+  const extras = biomeE.extras;
+  const rng = rng0(wsPrefix + ':extras');
+
+  // ---- plains: 田块 + 风车 + 干草垛 ----
+  if (extras.includes('fields')) {
+    const fieldCount = 6 + Math.floor(rng() * 5);
+    for (let fi = 0; fi < fieldCount; fi++) {
+      const fx = minX + rng() * (maxX - minX);
+      const fz = minZ + rng() * (maxZ - minZ);
+      // 只在城市 bbox 外围绘制田块
+      if (Math.abs(fx) < params.cityHalfW * 0.8 && Math.abs(fz) < params.cityHalfD * 0.8) continue;
+      const fw = 15 + rng() * 20;
+      const fd = 10 + rng() * 12;
+      const fAngle = (rng() - 0.5) * 0.4;
+      ctx.save();
+      ctx.translate(fx, fz);
+      ctx.rotate(fAngle);
+      // 田块底色
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#d8e8b0';
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
+      ctx.fillRect(-fw / 2, -fd / 2, fw, fd);
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      // 方格 hatch
+      hatchRect(ctx, rng, -fw / 2, -fd / 2, fw, fd, 5, '#a8b890');
+      // 田埂线（3-4 条水平线）
+      (ctx as unknown as Record<string, unknown>).strokeStyle = '#8a9870';
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+      const ridgeCount = 3 + Math.floor(rng() * 2);
+      for (let ri = 1; ri < ridgeCount; ri++) {
+        const ry = -fd / 2 + (ri / ridgeCount) * fd;
+        ctx.beginPath();
+        ctx.moveTo(-fw / 2 + rng() * 2, ry + rng() * 0.5);
+        ctx.lineTo(fw / 2 - rng() * 2, ry + rng() * 0.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  if (extras.includes('windmill')) {
+    // 1-2 座风车涂鸦
+    const wmCount = 1 + Math.floor(rng() * 2);
+    for (let wi = 0; wi < wmCount; wi++) {
+      const wx = (minX * 0.3 + maxX * 0.5) + rng() * (maxX - minX) * 0.3;
+      const wz = (minZ * 0.3 + maxZ * 0.5) + rng() * (maxZ - minZ) * 0.3;
+      // 塔身
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+      ctx.beginPath();
+      ctx.moveTo(wx - 1, wz + 4);
+      ctx.lineTo(wx, wz - 2);
+      ctx.lineTo(wx + 1, wz + 4);
+      ctx.stroke();
+      // 4 叶风叶（简化为 X 形两线）
+      const bladeLen = 3;
+      for (let bi = 0; bi < 2; bi++) {
+        const ba = bi * Math.PI / 2 + (rng() - 0.5) * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(wx + Math.cos(ba) * bladeLen, wz + Math.sin(ba) * bladeLen);
+        ctx.lineTo(wx - Math.cos(ba) * bladeLen, wz - Math.sin(ba) * bladeLen);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // ---- snow: 雪橇辙迹 ----
+  if (extras.includes('sled-track')) {
+    const trackStart = { x: params.cityHalfW * (0.5 + rng() * 0.4), z: params.cityHalfD * (0.5 + rng() * 0.4) };
+    const trackLen = 60 + rng() * 40;
+    const trackAngle = rng() * Math.PI * 2;
+    const trackPts1: [number, number][] = [];
+    const trackPts2: [number, number][] = [];
+    const trackOffset = 0.6;
+    const steps = 20;
+    for (let si = 0; si <= steps; si++) {
+      const u = si / steps;
+      const d = u * trackLen;
+      const waver = Math.sin(u * Math.PI * 3) * 4;
+      const tx2 = trackStart.x + Math.cos(trackAngle) * d + Math.cos(trackAngle + Math.PI / 2) * waver;
+      const tz2 = trackStart.z + Math.sin(trackAngle) * d + Math.sin(trackAngle + Math.PI / 2) * waver;
+      trackPts1.push([tx2 - Math.sin(trackAngle) * trackOffset, tz2 + Math.cos(trackAngle) * trackOffset]);
+      trackPts2.push([tx2 + Math.sin(trackAngle) * trackOffset, tz2 - Math.cos(trackAngle) * trackOffset]);
+    }
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#8ab4d0';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
+    dashedPath(ctx, trackPts1, [3, 4]);
+    dashedPath(ctx, trackPts2, [3, 4]);
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+
+  // ---- mountain: 梯田（山脚 3-4 条等高弧线组）----
+  if (extras.includes('terraces')) {
+    const { cosM, sinM, worldR } = params;
+    const terraceCount = 3 + Math.floor(rng() * 2);
+    const terrBaseD = worldR * 0.55;
+    for (let ti = 0; ti < terraceCount; ti++) {
+      const tDist = terrBaseD + ti * 6;
+      const arcLen = worldR * 0.8;
+      const arcPts: [number, number][] = [];
+      const N = 16;
+      for (let ai = 0; ai <= N; ai++) {
+        const av = (ai / N - 0.5) * arcLen;
+        const ax = cosM * tDist + (-sinM) * av;
+        const az = sinM * tDist + cosM * av;
+        arcPts.push([ax + (rng() - 0.5) * 1.5, az + (rng() - 0.5) * 1.5]);
+      }
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+      wobblyPath(ctx, rng, arcPts, 0.6);
+      ctx.stroke();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    }
+  }
+
+  // ---- mountain: 关隘城墙（城市 bbox 一侧手绘墙线）----
+  if (extras.includes('gate-wall')) {
+    const { cosM, sinM } = params;
+    // 城墙在城市朝山脉一侧（MA 方向）
+    const wallSide = params.cityHalfW * 1.05;
+    const wallH = params.cityHalfD * 1.8;
+    const wallStartX = cosM * wallSide - sinM * (-wallH / 2);
+    const wallStartZ = sinM * wallSide + cosM * (-wallH / 2);
+    const wallEndX   = cosM * wallSide - sinM * (wallH / 2);
+    const wallEndZ   = sinM * wallSide + cosM * (wallH / 2);
+    // 外墙线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
+    wobblyPath(ctx, rng, [[wallStartX, wallStartZ], [wallEndX, wallEndZ]], 0.5);
+    ctx.stroke();
+    // 内墙线（偏移 1.2 世界单位）
+    const innerOff = 1.2;
+    const innerStartX = wallStartX - cosM * innerOff;
+    const innerStartZ = wallStartZ - sinM * innerOff;
+    const innerEndX   = wallEndX   - cosM * innerOff;
+    const innerEndZ   = wallEndZ   - sinM * innerOff;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    wobblyPath(ctx, rng, [[innerStartX, innerStartZ], [innerEndX, innerEndZ]], 0.4);
+    ctx.stroke();
+    // 垛口齿（沿外墙线每隔 3 世界单位一个垛口）
+    const wallLen = Math.hypot(wallEndX - wallStartX, wallEndZ - wallStartZ);
+    const merlonCount = Math.floor(wallLen / 3);
+    const mDx = (wallEndX - wallStartX) / wallLen;
+    const mDz = (wallEndZ - wallStartZ) / wallLen;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    for (let mi = 0; mi < merlonCount; mi++) {
+      const md = (mi + 0.5) * (wallLen / merlonCount);
+      const mx = wallStartX + mDx * md;
+      const mz = wallStartZ + mDz * md;
+      // 垛口：短垂线向山方向伸出
+      ctx.beginPath();
+      ctx.moveTo(mx, mz);
+      ctx.lineTo(mx + cosM * 1.2, mz + sinM * 1.2);
+      ctx.stroke();
     }
   }
 }
@@ -1337,7 +1586,7 @@ export function buildCityPainter(
     paintBridges(ctx, city.roads, params, bridgeRng);
 
     // 层 4 — 街区补丁
-    paintDistricts(ctx, city.districts, wsPrefix);
+    paintDistricts(ctx, city.districts, wsPrefix, city.theme);
 
     // 层 5 — 道路（只画 main 和 avenue）
     paintRoads(ctx, city.roads, wsPrefix);
@@ -1349,7 +1598,10 @@ export function buildCityPainter(
     paintBuildings(ctx, city.districts, wsPrefix);
 
     // 层 8 — 树木
-    paintTrees(ctx, city.districts, wsPrefix);
+    paintTrees(ctx, city.districts, wsPrefix, city.theme);
+
+    // 层 9 — 专属元素（extras）
+    paintExtras(ctx, params, city, wsPrefix, minX, minZ, maxX, maxZ);
   }
 
   return { hitItems, drawStatic };
