@@ -10,9 +10,9 @@ export interface Plot {
 }
 
 const UNIT_AREA = 64; // 每篇笔记占据的世界面积（4x4 建筑格 × 4 格余量）
-const R_SCALE = 1.55; // 团块半径系数（区域更舒展，房屋同比放大后仍有留白）
-const MIN_GAP = 8; // 旷野最小间隙
-const TARGET_GAP = 14; // 目标间隙（区域大了，间隔相应收小）
+const R_SCALE = 2.0; // 团块半径系数（区域更舒展，房屋同比放大后仍有留白）
+const MIN_GAP = 5; // 旷野最小间隙
+const TARGET_GAP = 8; // 目标间隙（区域大了，间隔相应收小）
 const MAX_CANDIDATES = 80; // 每次散布候选点数
 const POLY_VERTS = 18; // 有机多边形顶点数
 
