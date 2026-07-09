@@ -2078,6 +2078,126 @@ function paintZoo(
 }
 
 /* ------------------------------------------------------------------ */
+/* 旷野元素 — 湿地森林                                                   */
+/* ------------------------------------------------------------------ */
+
+function paintWetland(
+  ctx: CanvasRenderingContext2D,
+  rng: () => number,
+  cx: number,
+  cz: number,
+  theme: string,
+  isHarbor: boolean,
+): void {
+  const isSnow = theme === 'snow';
+  const poolColor = isHarbor ? '#b8d4c0' : isSnow ? '#ccdce8' : PAPER.water;
+  const poolCount = 3 + Math.floor(rng() * 4); // 3-6
+
+  // 水洼群
+  for (let pi = 0; pi < poolCount; pi++) {
+    const px = cx + (rng() - 0.5) * 18;
+    const pz = cz + (rng() - 0.5) * 14;
+    const pr = 2 + rng() * 3;
+    (ctx as unknown as Record<string, unknown>).fillStyle = poolColor;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = isSnow ? 0.6 : 0.5;
+    wobblyCircle(ctx, rng, px, pz, pr, 0.18);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+    wobblyCircle(ctx, rng, px, pz, pr, 0.10);
+    ctx.stroke();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+
+  if (isSnow) {
+    // 冻结湿地：冰面裂纹代替芦苇
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#8ab4d0';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
+    for (let ci = 0; ci < 4; ci++) {
+      const cpx = cx + (rng() - 0.5) * 16;
+      const cpz = cz + (rng() - 0.5) * 12;
+      const crackPts: [number, number][] = [];
+      for (let ck = 0; ck < 5; ck++) {
+        crackPts.push([cpx + (rng() - 0.5) * 4, cpz + (rng() - 0.5) * 4]);
+      }
+      wobblyPath(ctx, rng, crackPts, 0.2);
+      ctx.stroke();
+    }
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  } else {
+    // 芦苇丛（3-5 簇，每簇 4-6 短竖线 + 顶端小点）
+    const reedClusterCount = 3 + Math.floor(rng() * 3);
+    for (let rc = 0; rc < reedClusterCount; rc++) {
+      const rx = cx + (rng() - 0.5) * 20;
+      const rz = cz + (rng() - 0.5) * 16;
+      const reedCount = 4 + Math.floor(rng() * 3);
+      (ctx as unknown as Record<string, unknown>).strokeStyle = '#8a9860';
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      for (let ri = 0; ri < reedCount; ri++) {
+        const rrx = rx + (rng() - 0.5) * 2.5;
+        const rrz = rz + (rng() - 0.5) * 2.0;
+        const rh = 1.5 + rng() * 1.0;
+        ctx.beginPath();
+        ctx.moveTo(rrx, rrz);
+        ctx.lineTo(rrx + (rng() - 0.5) * 0.3, rrz - rh);
+        ctx.stroke();
+        // 顶端小圆点
+        (ctx as unknown as Record<string, unknown>).fillStyle = '#6a7850';
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(rrx + (rng() - 0.5) * 0.3, rrz - rh - 0.15, 0.15, 0, Math.PI * 2);
+        ctx.fill();
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      }
+    }
+  }
+
+  // 木栈道（窄双线折线穿过湿地，3-5 段）
+  const boardwalkSegments = 3 + Math.floor(rng() * 3);
+  const bwPts: [number, number][] = [];
+  for (let bi = 0; bi < boardwalkSegments; bi++) {
+    bwPts.push([
+      cx + (rng() - 0.5) * 16,
+      cz - 8 + bi * (16 / boardwalkSegments) + (rng() - 0.5) * 3,
+    ]);
+  }
+  if (bwPts.length >= 2) {
+    const bwLeft = offsetPolyline(bwPts as ReadonlyArray<readonly [number, number]>, 0.4);
+    const bwRight = offsetPolyline(bwPts as ReadonlyArray<readonly [number, number]>, -0.4);
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#9a7a5e';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    wobblyPath(ctx, rng, bwLeft, 0.3);
+    ctx.stroke();
+    wobblyPath(ctx, rng, bwRight, 0.3);
+    ctx.stroke();
+    // 横板短线
+    for (let bi = 0; bi < bwPts.length - 1; bi++) {
+      const tx = (bwPts[bi][0] + bwPts[bi + 1][0]) / 2;
+      const tz = (bwPts[bi][1] + bwPts[bi + 1][1]) / 2;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
+      ctx.beginPath();
+      ctx.moveTo(tx - 0.5, tz);
+      ctx.lineTo(tx + 0.5, tz);
+      ctx.stroke();
+    }
+  }
+
+  // 2-3 棵水边树
+  const waterTreeCount = 2 + Math.floor(rng() * 2);
+  for (let wt = 0; wt < waterTreeCount; wt++) {
+    const wtx = cx + (rng() - 0.5) * 20;
+    const wtz = cz + (rng() - 0.5) * 16;
+    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
+    scribbleBlob(ctx, rng, wtx, wtz, 1.0 + rng() * 0.5);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 层 6.5 — 旷野填充                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -2281,6 +2401,17 @@ function paintWilderness(
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zi) % candidates.length;
     const [zx, zz] = candidates[candidateIdx];
     paintZoo(ctx, rng, zx, zz, theme);
+  }
+
+  // 湿地：0-2 处
+  const wetlandCount = Math.min(
+    Math.floor(rng() * 3), // 0-2
+    Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount - zooCount),
+  );
+  for (let wi2 = 0; wi2 < wetlandCount; wi2++) {
+    const candidateIdx = (meadowCount + forestPatchCount + parkCount + zooCount + wi2) % candidates.length;
+    const [wx2, wz2] = candidates[candidateIdx];
+    paintWetland(ctx, rng, wx2, wz2, theme, isHarbor);
   }
 
   void biome;

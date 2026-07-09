@@ -159,11 +159,12 @@ describe('T5 — 聚落内树木减量', () => {
     // With area/40 (old): distA+distB → max(2,10) + max(2,10) = 10+10 = 20 trees
     //   → 20 × 14 = 280 from trees alone; total ~2430 with other sources (MEASURED)
     // With area/120 (new): max(1,3) + max(1,3) = 3+3 = 6 trees
-    //   → 6 × 14 = 84 from trees; drop by ~196; total ~2234 (expected)
-    // Threshold < 2300: safely 130 units below old baseline (2430), well above new (2234).
-    // This ensures robust detection of formula change with large safety margin.
+    //   → 6 × 14 = 84 from trees; drop by ~196; base ~2234 (measured pre-Task3)
+    // Task 3 adds paintWetland: 2-3 waterside trees → up to 3×14=42 extra calls.
+    // Measured with wetland: ~2304. Threshold < 2400: below old baseline (2430),
+    // well above new baseline (2304). Still detects any regression to area/40 formula.
     const qcCount = calls.filter(c => c === 'quadraticCurveTo').length;
-    expect(qcCount).toBeLessThan(2300);
+    expect(qcCount).toBeLessThan(2400);
   });
 });
 
@@ -175,5 +176,19 @@ describe('T6 — Zoo 出现时确定性', () => {
     paintCity(w1 as never, fixture, params, 'test');
     paintCity(w2 as never, fixture, params, 'test');
     expect(c1).toEqual(c2);
+  });
+});
+
+describe('T7 — 湿地元素避让聚落', () => {
+  it('强制候选点与聚落重叠时，paintWilderness 不崩溃且仍确定', () => {
+    // Small map: T=8 so all wilderness candidates are filtered out (too close to districts)
+    const tinyParams = worldParams('tiny', 8, 8, 10, 10);
+    const { world, calls } = makeMockWorld();
+    // Should not throw; zoo/wetland simply won't appear
+    expect(() => paintCity(world as never, fixture, tinyParams, 'tiny')).not.toThrow();
+    // And it must be deterministic
+    const { world: w2, calls: c2 } = makeMockWorld();
+    paintCity(w2 as never, fixture, tinyParams, 'tiny');
+    expect(calls).toEqual(c2);
   });
 });
