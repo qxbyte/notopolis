@@ -10,88 +10,13 @@ export interface Plot {
 }
 
 const UNIT_AREA = 64; // 每篇笔记占据的世界面积（4x4 建筑格 × 4 格余量）
-const SAMPLE_STEP = 4; // 沿边每 ~4 单位取一个采样点
-const MAX_INWARD_RATIO = 0.18; // 最大向内扰动比例（半边长的 18%）
-const CORNER_SCALE = 0.5; // 角点扰动缩放系数
-
-interface Rect {
-  x: number;
-  z: number;
-  width: number;
-  depth: number;
-}
-
-/**
- * 沿 bbox 周界采样点，向内扰动生成不规则多边形。
- * 只向内扰动 → 多个街区天然不重叠。
- * 角点参与扰动但幅度减半（保持大致四角形态）。
- */
-function buildPolygon(rect: Rect, rng: () => number): [number, number][] {
-  const { x, z, width, depth } = rect;
-  const hw = width / 2; // x 方向半边长
-  const hd = depth / 2; // z 方向半边长
-  const cx = x + hw;
-  const cz = z + hd;
-
-  // 最大向内扰动距离（各方向独立）
-  const maxDx = hw * MAX_INWARD_RATIO;
-  const maxDz = hd * MAX_INWARD_RATIO;
-
-  const points: [number, number][] = [];
-
-  // 辅助：沿一条边（从 start 到 end，不含终点）采样，包含起点（角点）
-  // dir: 'right' | 'down' | 'left' | 'up' 表示前进方向，用于判断向内的法线方向
-  const sampleEdge = (
-    x0: number, z0: number,
-    x1: number, z1: number,
-    inNormX: number, inNormZ: number,
-    isStartCorner: boolean,
-  ) => {
-    const dx = x1 - x0;
-    const dz = z1 - z0;
-    const edgeLen = Math.sqrt(dx * dx + dz * dz);
-    const steps = Math.max(1, Math.round(edgeLen / SAMPLE_STEP));
-
-    for (let i = 0; i < steps; i++) {
-      const t = i / steps;
-      const bx = x0 + dx * t;
-      const bz = z0 + dz * t;
-
-      // 判断是否为角点（i === 0 且 isStartCorner）
-      const isCorner = i === 0 && isStartCorner;
-      const scale = isCorner ? CORNER_SCALE : 1.0;
-
-      // 向内扰动：rng() in [0,1)，只向内（法线方向为正）
-      const pertX = rng() * maxDx * scale * inNormX;
-      const pertZ = rng() * maxDz * scale * inNormZ;
-
-      // 夹紧到 bbox 内
-      const px = Math.max(x, Math.min(x + width, bx + pertX));
-      const pz = Math.max(z, Math.min(z + depth, bz + pertZ));
-
-      points.push([px, pz]);
-    }
-  };
-
-  // 四条边，法线方向（向内）：
-  // 上边 (z=z): 向内法线 z 方向为 +1（往 z 增大方向）
-  // 右边 (x=x+width): 向内法线 x 方向为 -1
-  // 下边 (z=z+depth): 向内法线 z 方向为 -1
-  // 左边 (x=x): 向内法线 x 方向为 +1
-  //
-  // 顶点顺序：左上 → 右上 → 右下 → 左下（顺时针）
-  sampleEdge(x, z,           x + width, z,           0, 1, true);   // 上边：角点左上
-  sampleEdge(x + width, z,   x + width, z + depth,   -1, 0, true);  // 右边：角点右上
-  sampleEdge(x + width, z + depth, x, z + depth,     0, -1, true);  // 下边：角点右下
-  sampleEdge(x, z + depth,  x, z,                    1, 0, true);   // 左边：角点左下
-
-  // 确保多边形不闭合首尾重复点（渲染时自行闭合）
-  return points;
-}
+const R_SCALE = 1.2; // 团块半径系数（确保楼位格子够用）
+const MIN_GAP = 12; // 旷野最小间隙
+const MAX_CANDIDATES = 80; // 每次散布候选点数
+const POLY_VERTS = 18; // 有机多边形顶点数
 
 /**
  * 射线法判断点 (x, z) 是否在多边形 poly 内部（或边界上）。
- * 供 Task 6 使用。
  */
 export function pointInPolygon(x: number, z: number, poly: [number, number][]): boolean {
   let inside = false;
@@ -107,42 +32,151 @@ export function pointInPolygon(x: number, z: number, poly: [number, number][]): 
   return inside;
 }
 
+/**
+ * 以 (cx, cz) 为中心、基础半径 R 生成 18 顶点有机多边形。
+ * 使用三种正弦扰动叠加，顶点半径比 max/min ≥ 1.25。
+ */
+function buildOrganicPolygon(
+  cx: number,
+  cz: number,
+  R: number,
+  rng: () => number,
+): [number, number][] {
+  const φ1 = rng() * Math.PI * 2;
+  const φ2 = rng() * Math.PI * 2;
+  const φ3 = rng() * Math.PI * 2;
+
+  const points: [number, number][] = [];
+  for (let i = 0; i < POLY_VERTS; i++) {
+    const θ = (i / POLY_VERTS) * Math.PI * 2;
+    const r =
+      R *
+      (0.7 +
+        0.16 * Math.sin(3 * θ + φ1) +
+        0.11 * Math.sin(5 * θ + φ2) +
+        0.08 * Math.sin(2 * θ + φ3));
+    points.push([cx + r * Math.cos(θ), cz + r * Math.sin(θ)]);
+  }
+  return points;
+}
+
+/**
+ * 从多边形顶点推导 bbox（x/z/width/depth）。
+ */
+function bboxFromPolygon(polygon: [number, number][]): {
+  x: number;
+  z: number;
+  width: number;
+  depth: number;
+} {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (const [px, pz] of polygon) {
+    if (px < minX) minX = px;
+    if (px > maxX) maxX = px;
+    if (pz < minZ) minZ = pz;
+    if (pz > maxZ) maxZ = pz;
+  }
+  return { x: minX, z: minZ, width: maxX - minX, depth: maxZ - minZ };
+}
+
+/**
+ * 散落式聚落布局：每个目录一个有机团块，拉开散布在世界地图上。
+ * 签名不变：counts → Plot[]
+ */
 export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[] {
   const items = counts
     .filter((c) => c.count > 0)
     .sort((a, b) => b.count - a.count || a.dir.localeCompare(b.dir));
+
   const total = items.reduce((s, c) => s + c.count, 0);
   if (total === 0) return [];
-  const side = Math.ceil(Math.sqrt(total * UNIT_AREA));
+
+  // 计算每个团块的半径
+  const radii = items.map((item) => Math.sqrt((item.count * UNIT_AREA) / Math.PI) * R_SCALE);
+  const maxR = Math.max(...radii);
+
+  // 世界散布半径
+  const SPREAD_R = Math.max(Math.sqrt(total * UNIT_AREA) * 1.5, maxR * 4);
+
+  // 已放置中心点集合
+  const placed: Array<{ cx: number; cz: number; R: number }> = [];
+  const centers: Array<{ cx: number; cz: number }> = [];
+
   const plots: Plot[] = [];
 
-  function slice(rect: Rect, rest: typeof items, sum: number, horizontal: boolean): void {
-    if (rest.length === 0) return;
-    if (rest.length === 1) {
-      const rng = mulberry32(hashSeed(rest[0].dir));
-      const polygon = buildPolygon(rect, rng);
-      plots.push({ dir: rest[0].dir, ...rect, polygon });
-      return;
-    }
-    const [head, ...tail] = rest;
-    const frac = head.count / sum;
-    if (horizontal) {
-      const w = rect.width * frac;
-      const headRect: Rect = { x: rect.x, z: rect.z, width: w, depth: rect.depth };
-      const rng = mulberry32(hashSeed(head.dir));
-      const polygon = buildPolygon(headRect, rng);
-      plots.push({ dir: head.dir, ...headRect, polygon });
-      slice({ ...rect, x: rect.x + w, width: rect.width - w }, tail, sum - head.count, false);
+  for (let idx = 0; idx < items.length; idx++) {
+    const item = items[idx];
+    const R = radii[idx];
+
+    // 每个团块用独立的 rng（由 dir 哈希生成）
+    const rng = mulberry32(hashSeed(item.dir));
+    // 消耗3次生成φ1/φ2/φ3，保证多边形确定性
+    const rngScatter = mulberry32(hashSeed('scatter:' + item.dir));
+
+    let cx: number;
+    let cz: number;
+
+    if (idx === 0) {
+      // 最大的落在离原点 ≤ SPREAD_R*0.25 的种子随机位置
+      const r0 = rngScatter() * SPREAD_R * 0.25;
+      const a0 = rngScatter() * Math.PI * 2;
+      cx = r0 * Math.cos(a0);
+      cz = r0 * Math.sin(a0);
     } else {
-      const d = rect.depth * frac;
-      const headRect: Rect = { x: rect.x, z: rect.z, width: rect.width, depth: d };
-      const rng = mulberry32(hashSeed(head.dir));
-      const polygon = buildPolygon(headRect, rng);
-      plots.push({ dir: head.dir, ...headRect, polygon });
-      slice({ ...rect, z: rect.z + d, depth: rect.depth - d }, tail, sum - head.count, true);
+      // 生成候选点，选间隙最大的
+      let bestCx = 0;
+      let bestCz = 0;
+      let bestGap = -Infinity;
+
+      for (let c = 0; c < MAX_CANDIDATES; c++) {
+        // 均匀撒在半径 SPREAD_R 圆内（拒绝采样 → 均匀分布）
+        let candX: number;
+        let candZ: number;
+        let u: number, v: number;
+        do {
+          u = rngScatter() * 2 - 1;
+          v = rngScatter() * 2 - 1;
+        } while (u * u + v * v > 1);
+        candX = u * SPREAD_R;
+        candZ = v * SPREAD_R;
+
+        // 与所有已放置团块的最小间隙
+        let minGap = Infinity;
+        for (const p of placed) {
+          const dist = Math.sqrt((candX - p.cx) ** 2 + (candZ - p.cz) ** 2);
+          const gap = dist - R - p.R;
+          if (gap < minGap) minGap = gap;
+        }
+
+        if (minGap > bestGap) {
+          bestGap = minGap;
+          bestCx = candX;
+          bestCz = candZ;
+        }
+
+        // 若满足最小间隙且 gap 已足够大，提前退出
+        if (minGap >= MIN_GAP && minGap > bestGap - 0.01) break;
+      }
+
+      cx = bestCx;
+      cz = bestCz;
     }
+
+    placed.push({ cx, cz, R });
+    centers.push({ cx, cz });
+
+    const polygon = buildOrganicPolygon(cx, cz, R, rng);
+    const bbox = bboxFromPolygon(polygon);
+
+    plots.push({
+      dir: item.dir,
+      ...bbox,
+      polygon,
+    });
   }
 
-  slice({ x: -side / 2, z: -side / 2, width: side, depth: side }, items, total, true);
   return plots;
 }

@@ -28,6 +28,20 @@ export function buildRoads(districts: District[], graph: GraphResult): Road[] {
   const center = new Map(
     districts.map((d) => [d.dir, [d.x + d.width / 2, d.z + d.depth / 2] as [number, number]]),
   );
+
+  // 从 polygon 顶点推导每个区的等效半径（最大顶点距中心距离）
+  const radius = new Map<string, number>();
+  for (const d of districts) {
+    const cx = d.x + d.width / 2;
+    const cz = d.z + d.depth / 2;
+    let maxR = 0;
+    for (const [px, pz] of d.polygon) {
+      const r = Math.sqrt((px - cx) ** 2 + (pz - cz) ** 2);
+      if (r > maxR) maxR = r;
+    }
+    radius.set(d.dir, maxR);
+  }
+
   const pairCount = new Map<string, number>();
   for (const [from, to] of graph.crossDirEdges) {
     const key = [dirOf(from), dirOf(to)].sort().join('\n');
@@ -40,7 +54,14 @@ export function buildRoads(districts: District[], graph: GraphResult): Road[] {
       const [d1, d2] = key.split('\n');
       const c1 = center.get(d1);
       const c2 = center.get(d2);
-      if (c1 && c2) roads.push({ kind: 'avenue', points: [c1, c2] });
+      if (!c1 || !c2) return;
+      // 仅连接中心距 < R_i + R_j + 70 的相邻区（远距离交给铁路）
+      const dist = Math.sqrt((c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2);
+      const ri = radius.get(d1) ?? 0;
+      const rj = radius.get(d2) ?? 0;
+      if (dist < ri + rj + 70) {
+        roads.push({ kind: 'avenue', points: [c1, c2] });
+      }
     });
   return roads;
 }

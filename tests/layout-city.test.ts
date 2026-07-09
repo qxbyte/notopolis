@@ -29,9 +29,12 @@ describe('buildCityModel', () => {
     expect(m1.tier).toBe('camp');
     expect(m1.districts.map((d) => d.dir).sort()).toEqual(['01-AI', '02-Dev', '99-Inbox']);
     expect(m1.districts.find((d) => d.dir === '99-Inbox')!.isInbox).toBe(true);
-    // 道路：每区一条主街 + 至少一条区内街巷 + 跨区大道
+    // 道路：每区一条主街 + 至少一条区内街巷
+    // avenue 数量 ≥0 且 ≤5（散布后区域可能相距远，avenue 可为 0）
     expect(m1.roads.filter((r) => r.kind === 'main').length).toBe(3);
     expect(m1.roads.some((r) => r.kind === 'street')).toBe(true);
-    expect(m1.roads.some((r) => r.kind === 'avenue')).toBe(true);
+    const avenueCount = m1.roads.filter((r) => r.kind === 'avenue').length;
+    expect(avenueCount).toBeGreaterThanOrEqual(0);
+    expect(avenueCount).toBeLessThanOrEqual(5);
   });
 });
