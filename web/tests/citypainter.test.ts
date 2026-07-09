@@ -157,12 +157,12 @@ describe('T5 — 聚落内树木减量', () => {
     paintCity(world as never, fixture, params, 'test');
     // scribbleBlob does exactly 14 quadraticCurveTo per call.
     // With area/40 (old): distA+distB → max(2,10) + max(2,10) = 10+10 = 20 trees
-    //   → 20 × 14 = 280 from trees alone; total ~2430 with other sources
+    //   → 20 × 14 = 280 from trees alone; total ~2430 with other sources (MEASURED)
     // With area/120 (new): max(1,3) + max(1,3) = 3+3 = 6 trees
-    //   → 6 × 14 = 84 from trees; drop by ~196; total ~2234
-    // We verify the drop happened by asserting new total < midpoint
-    // Old total ~2430, new total ~2234, assert < 2400 to verify new formula in use
+    //   → 6 × 14 = 84 from trees; drop by ~196; total ~2234 (expected)
+    // Threshold < 2300: safely 130 units below old baseline (2430), well above new (2234).
+    // This ensures robust detection of formula change with large safety margin.
     const qcCount = calls.filter(c => c === 'quadraticCurveTo').length;
-    expect(qcCount).toBeLessThan(2400);
+    expect(qcCount).toBeLessThan(2300);
   });
 });
