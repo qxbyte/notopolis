@@ -61,13 +61,19 @@
 #card .excerpt::before { content: '「'; position: absolute; left: -2px; top: -2px;
                          color: var(--ink-faint); font-family: var(--font-hand); }
 
-#card .actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+#card .actions { margin-top: 12px; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
 #card a { font-size: 12.5px; padding: 6px 16px; cursor: pointer; letter-spacing: 2px;
           border: none; border-radius: var(--hand-r-sm);
           background: var(--seal); color: #fdf8ee; text-decoration: none;
           font-family: var(--font-hand); font-weight: 700;
           box-shadow: 2px 2px 0 rgba(58, 52, 40, 0.25); transition: transform .12s, background .12s; }
 #card a:hover { background: var(--seal-dark); transform: translate(-1px, -1px) rotate(-0.5deg); }
+/* 「打开」次级动作：纸片风，与红色主按钮区分 */
+#card .card-open { font-size: 12.5px; padding: 6px 16px; cursor: pointer; letter-spacing: 2px;
+          border: 1.5px solid var(--ink-line); border-radius: var(--hand-r-sm);
+          background: var(--paper); color: var(--ink); font-family: var(--font-hand); font-weight: 700;
+          box-shadow: 2px 2px 0 rgba(58, 52, 40, 0.15); transition: transform .12s; }
+#card .card-open:hover { transform: translate(-1px, -1px) rotate(-0.5deg); }
 
 #card .close { position: absolute; top: 10px; right: 12px; border: none; background: none;
                font-size: 14px; color: var(--ink-faint); cursor: pointer; }
@@ -225,12 +231,12 @@
   box-shadow: 2px 3px 0 rgba(58, 52, 40, 0.12); transition: transform .12s; }
 .hud-btn:hover, .lens-btn:hover { transform: translate(-1px, -1px) rotate(-0.5deg); }
 
-/* ---- 透镜按钮组（图层切换，城市视图右下） ---- */
-.lens-bar { position: fixed; right: 16px; bottom: 14px; z-index: 6; display: flex; gap: 6px; }
+/* ---- 透镜按钮组（图层切换，城市视图底部居中，避开右侧抽屉与左侧提示） ---- */
+.lens-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 9; display: flex; gap: 6px; }
 .lens-btn.active { border-color: var(--seal); color: var(--seal); box-shadow: 2px 3px 0 rgba(192, 69, 58, 0.25); }
 
-/* ---- 侧栏抽屉（工地/园丁面板） ---- */
-.panel { position: fixed; top: 0; right: 0; bottom: 0; width: 300px; z-index: 8;
+/* ---- 侧栏抽屉（工地/园丁面板）：top 下移到按钮栏下方，避免顶部内容被遮挡 ---- */
+.panel { position: fixed; top: 52px; right: 0; bottom: 0; width: 300px; z-index: 8;
   background: var(--paper-card); border-left: 2px solid var(--ink-line);
   box-shadow: -4px 0 14px rgba(58, 52, 40, 0.14);
   transform: translateX(105%); transition: transform .25s ease;

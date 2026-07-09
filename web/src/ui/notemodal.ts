@@ -67,6 +67,9 @@ export function createNoteModal(
     if (edit) {
       editArea.value = curSource;
       editArea.focus();
+      // 光标置于文首而非文末，滚动回顶部
+      editArea.setSelectionRange(0, 0);
+      editArea.scrollTop = 0;
     }
   }
 
