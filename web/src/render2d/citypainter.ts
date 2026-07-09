@@ -92,7 +92,7 @@ function paintBackground(
 
   // 140 条短纤维线
   (ctx as unknown as Record<string, unknown>).strokeStyle = 'rgba(90,90,86,0.07)';
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
   for (let i = 0; i < 140; i++) {
     const fx = minX + rng() * (maxX - minX);
     const fz = minZ + rng() * (maxZ - minZ);
@@ -153,7 +153,7 @@ function paintMountains(
 
     // 绘制山峰轮廓
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
     wobblyPath(ctx, rng, zigPts, 0.8);
     ctx.stroke();
 
@@ -161,7 +161,7 @@ function paintMountains(
     const snowY = cz - peakH * 0.85;
     const snowW = baseW * 0.25;
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.snow;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.5;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.22;
     ctx.beginPath();
     ctx.moveTo(cx - snowW, snowY + 1.5);
     ctx.lineTo(cx, snowY - 1.5);
@@ -213,13 +213,13 @@ function paintRiver(
 
   // 左岸线
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
   wobblyPath(ctx, rng, leftBank, 0.8);
   ctx.stroke();
 
   // 右岸线
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
   wobblyPath(ctx, rng, rightBank, 0.8);
   ctx.stroke();
 
@@ -227,7 +227,7 @@ function paintRiver(
   const waveCount = 5 + Math.floor(rng() * 4);
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
   (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
   for (let i = 0; i < waveCount; i++) {
     const ti = rng();
     const idx = Math.floor(ti * (pts.length - 1));
@@ -272,7 +272,7 @@ function paintCanal(
 
   // 两岸线
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
   wobblyPath(ctx, rng, leftBank, 0.5);
   ctx.stroke();
   wobblyPath(ctx, rng, rightBank, 0.5);
@@ -298,7 +298,7 @@ function paintLakes(
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
     wobblyCircle(ctx, rng, lake.x, lake.z, lake.r, 0.1);
     ctx.stroke();
 
@@ -306,7 +306,7 @@ function paintLakes(
     const waveCount = 3 + Math.floor(rng() * 3);
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
     (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
     for (let w = 0; w < waveCount; w++) {
       const wAngle = rng() * Math.PI * 2;
       const wDist = rng() * lake.r * 0.6;
@@ -344,7 +344,7 @@ function paintBridges(
       if (riverDist(mx, mz) < RIVER_W + 3) {
         // 桥：两道横线
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 2;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.3;
         const dx = x2 - x1;
         const dz = z2 - z1;
         const len = Math.sqrt(dx * dx + dz * dz) || 1;
@@ -391,7 +391,7 @@ function paintDistricts(
 
     // wobbly 描边
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.6;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.24;
     const closedPoly = [...poly, poly[0]] as [number, number][];
     wobblyPath(ctx, rng, closedPoly, 0.8);
     ctx.stroke();
@@ -420,7 +420,7 @@ function paintDistricts(
       (ctx as unknown as Record<string, unknown>).textAlign = 'center';
       (ctx as unknown as Record<string, unknown>).textBaseline = 'middle';
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
-      (ctx as unknown as Record<string, unknown>).lineWidth = fontSize * 0.4;
+      (ctx as unknown as Record<string, unknown>).lineWidth = fontSize * 0.06;
       ctx.strokeText(district.dir || 'inbox', cx, cz);
 
       // 填充（ink 色）
@@ -490,19 +490,19 @@ function paintRoads(
 
     // 左侧边线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
     wobblyPath(ctx, rng, leftEdge, 1.2);
     ctx.stroke();
 
     // 右侧边线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
     wobblyPath(ctx, rng, rightEdge, 1.2);
     ctx.stroke();
 
     // 中央虚线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
     dashedPath(ctx, pts, [4, 6]);
 
     // 路口红绿灯（仅在与其他 main 路相交的路口处画 3 个小圆点）
@@ -551,7 +551,7 @@ function paintParks(
     const blobCount = 2 + Math.floor(rng() * 3);
     (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
     for (let b = 0; b < blobCount; b++) {
       const bx = bboxMinX + rng() * (bboxMaxX - bboxMinX);
       const bz = bboxMinZ + rng() * (bboxMaxZ - bboxMinZ);
@@ -575,7 +575,7 @@ function paintParks(
     const benchX = bboxMinX + rng() * (bboxMaxX - bboxMinX);
     const benchZ = bboxMinZ + rng() * (bboxMaxZ - bboxMinZ);
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 1.5;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.22;
     ctx.beginPath();
     ctx.moveTo(benchX - 1.5, benchZ);
     ctx.lineTo(benchX + 1.5, benchZ);
@@ -620,7 +620,7 @@ function paintBuildings(
         // 广场圈
         (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.roadFill;
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
         wobblyCircle(ctx, rng, b.x, b.z, squareR, 0.1);
         ctx.fill();
         wobblyCircle(ctx, rng, b.x, b.z, squareR, 0.08);
@@ -628,19 +628,19 @@ function paintBuildings(
 
         // 外圆
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.6;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.24;
         wobblyCircle(ctx, rng, b.x, b.z, outerR, 0.08);
         ctx.stroke();
 
         // 内圆
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
         wobblyCircle(ctx, rng, b.x, b.z, innerR, 0.08);
         ctx.stroke();
 
         // 内部小房子（4-5 笔折线）
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
         const houseW = r * 0.6;
         const houseH = r * 0.5;
         ctx.beginPath();
@@ -667,13 +667,13 @@ function paintBuildings(
       } else if (b.construction) {
         // 施工中：虚线轮廓 + 斜排线 + 吊臂
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.6;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.24;
         dashedPath(ctx, [[bx, bz], [bx + bw, bz], [bx + bw, bz + bh], [bx, bz + bh], [bx, bz]], [5, 4]);
         hatchRect(ctx, rng, bx, bz, bw, bh, 4, PAPER.inkFaded);
 
         // 小吊臂涂鸦（3 笔折线）
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.2;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
         ctx.beginPath();
         ctx.moveTo(bx + bw * 0.7, bz + bh); // 底部
         ctx.lineTo(bx + bw * 0.7, bz - bh * 0.3); // 竖杆
@@ -706,13 +706,13 @@ function paintBuildings(
 
         // 描边
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.6;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.24;
         wobblyRect(ctx, rng, lbx, lbz, lbw, lbh, 1.2);
         ctx.stroke();
 
         // 旗帜：短竖杆 + 小三角旗
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.0;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
         const flagX = b.x;
         const flagZ = b.z - lr;
         ctx.beginPath();
@@ -738,20 +738,20 @@ function paintBuildings(
 
         // 描边
         (ctx as unknown as Record<string, unknown>).strokeStyle = inkColor;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 1.6;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.24;
         wobblyRect(ctx, rng, bx, bz, bw, bh, 1.0);
         ctx.stroke();
 
         // 屋脊线
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
         wobblyPath(ctx, rng, [[bx, b.z], [bx + bw, b.z]], 0.5);
         ctx.stroke();
 
         // age > 180 天：额外 2 笔小杂草
         if (ageDays > 180) {
           (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
-          (ctx as unknown as Record<string, unknown>).lineWidth = 0.6;
+          (ctx as unknown as Record<string, unknown>).lineWidth = 0.09;
           for (let wi = 0; wi < 2; wi++) {
             const gx = bx + rng() * bw;
             const gz = bz + rng() * bh;
@@ -818,7 +818,7 @@ function paintTrees(
       // 树冠（一次 beginPath，fill 与 stroke 共享同一路径）
       (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-      (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
       (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
       scribbleBlob(ctx, rng, tx, tz, tr);
       ctx.fill();
@@ -828,7 +828,7 @@ function paintTrees(
       // 树干（短竖线 2-3 个单位高）
       const trunkH = 2 + rng();
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-      (ctx as unknown as Record<string, unknown>).lineWidth = 0.8;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
       ctx.beginPath();
       ctx.moveTo(tx, tz);
       ctx.lineTo(tx, tz + trunkH);

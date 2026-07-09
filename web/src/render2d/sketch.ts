@@ -50,6 +50,20 @@ function rand(rng: () => number, lo: number, hi: number): number {
   return lo + rng() * (hi - lo);
 }
 
+/**
+ * 全局手感比例：doodle-slam 原语的默认参数（wobble 1.4、gap 6、grow 0.3…）
+ * 是按"像素画布"调校的。Notopolis 在"世界坐标"里作画（1 单位 ≈ 8px），
+ * 直接沿用会得到 10 倍粗的墨线。绘制前调用 setSketchScale(≈0.15) 统一换算，
+ * 默认 1 保持与原版逐字一致（既有测试不受影响）。
+ */
+let SCALE = 1;
+export function setSketchScale(s: number): void {
+  SCALE = s;
+}
+export function getSketchScale(): number {
+  return SCALE;
+}
+
 /* ------------------------------------------------------------------ */
 /* Exported primitives                                                  */
 /* ------------------------------------------------------------------ */
@@ -67,19 +81,20 @@ export function wobblyPath(
   pts: ReadonlyArray<readonly [number, number]>,
   wobble = 1.4,
 ): void {
+  const wb = wobble * SCALE;
   ctx.beginPath();
   for (let i = 0; i < pts.length - 1; i++) {
     const [x1, y1] = pts[i];
     const [x2, y2] = pts[i + 1];
-    const segs = Math.max(2, Math.floor(dist(x1, y1, x2, y2) / 26));
+    const segs = Math.max(2, Math.floor(dist(x1, y1, x2, y2) / (26 * SCALE)));
     if (i === 0) {
-      ctx.moveTo(x1 + rand(rng, -wobble, wobble), y1 + rand(rng, -wobble, wobble));
+      ctx.moveTo(x1 + rand(rng, -wb, wb), y1 + rand(rng, -wb, wb));
     }
     for (let s = 1; s <= segs; s++) {
       const t = s / segs;
       ctx.lineTo(
-        lerp(x1, x2, t) + rand(rng, -wobble, wobble),
-        lerp(y1, y2, t) + rand(rng, -wobble, wobble),
+        lerp(x1, x2, t) + rand(rng, -wb, wb),
+        lerp(y1, y2, t) + rand(rng, -wb, wb),
       );
     }
   }
@@ -161,17 +176,18 @@ export function hatchRect(
   gap = 6,
   inkFaded: string = PAPER.inkFaded,
 ): void {
+  const g = Math.max(1e-6, gap * SCALE);
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);
   ctx.clip();
   ctx.beginPath();
-  for (let d = -h; d < w; d += gap) {
-    ctx.moveTo(x + d + rand(rng, -1, 1), y + h);
-    ctx.lineTo(x + d + h + rand(rng, -1, 1), y);
+  for (let d = -h; d < w; d += g) {
+    ctx.moveTo(x + d + rand(rng, -SCALE, SCALE), y + h);
+    ctx.lineTo(x + d + h + rand(rng, -SCALE, SCALE), y);
   }
   (ctx as CanvasRenderingContext2D & { strokeStyle: string }).strokeStyle = inkFaded;
-  (ctx as CanvasRenderingContext2D & { lineWidth: number }).lineWidth = 0.8;
+  (ctx as CanvasRenderingContext2D & { lineWidth: number }).lineWidth = 0.8 * SCALE;
   ctx.stroke();
   ctx.restore();
 }
@@ -273,7 +289,7 @@ export function dashedPath(
   pts: ReadonlyArray<readonly [number, number]>,
   dash: number[],
 ): void {
-  ctx.setLineDash(dash);
+  ctx.setLineDash(dash.map((d) => d * SCALE));
   ctx.beginPath();
   for (let i = 0; i < pts.length; i++) {
     const [x, y] = pts[i];

@@ -12,7 +12,7 @@ import { hitTest } from '../render2d/hit';
 import type { HitItem } from '../render2d/hit';
 import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
-import { PAPER } from '../render2d/sketch';
+import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
 
@@ -32,6 +32,9 @@ export function showCity2D(
   city: CityModel,
   onBack: () => void,
 ): CityViewHandle {
+  // 手绘原语按世界单位作画（1 单位 ≈ 8px 离屏像素），像素调校的默认手感需统一换算
+  setSketchScale(0.15);
+
   // ---- 1. 计算城市几何尺寸 ----
   const xs = city.districts.flatMap((d) => [d.x, d.x + d.width]);
   const zs = city.districts.flatMap((d) => [d.z, d.z + d.depth]);

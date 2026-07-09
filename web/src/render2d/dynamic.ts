@@ -574,7 +574,7 @@ function drawPlane(
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
   (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
   (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
-  dashedPath(ctx, trailPts, [0.6, 0.8]);
+  dashedPath(ctx, trailPts, [4, 5.3]); // dashedPath 内部按 sketch SCALE(0.15) 换算 → 实际约 0.6/0.8 世界单位
   (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 }
 
