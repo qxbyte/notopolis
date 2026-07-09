@@ -20,6 +20,7 @@ import {
   dashedPath,
 } from './sketch';
 import { rng0, hashStr } from '../util/seed';
+import { getBiome } from './biomes';
 
 /* ------------------------------------------------------------------ */
 /* Helper: 线性插值 hex 颜色（分 R/G/B 通道）                           */
@@ -77,10 +78,25 @@ function paintBackground(
   ctx: CanvasRenderingContext2D,
   minX: number, minZ: number, maxX: number, maxZ: number,
   rng: () => number,
+  paperColor: string = PAPER.paper,
+  patchColor: string = PAPER.grass,
 ): void {
   // 填充纸底色
-  (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.paper;
+  (ctx as unknown as Record<string, unknown>).fillStyle = paperColor;
   ctx.fillRect(minX, minZ, maxX - minX, maxZ - minZ);
+
+  // 4-8 个地面斑块色块（随机圆角区域）
+  (ctx as unknown as Record<string, unknown>).fillStyle = patchColor;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.3;
+  const patchCount = 4 + Math.floor(rng() * 5);
+  for (let pi = 0; pi < patchCount; pi++) {
+    const px = minX + rng() * (maxX - minX);
+    const pz = minZ + rng() * (maxZ - minZ);
+    const pr = 10 + rng() * 20;
+    scribbleBlob(ctx, rng, px, pz, pr);
+    ctx.fill();
+  }
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
   // 2000 个稀疏噪点
   (ctx as unknown as Record<string, unknown>).fillStyle = 'rgba(90,90,86,0.05)';
@@ -113,6 +129,10 @@ function paintMountains(
   ctx: CanvasRenderingContext2D,
   params: WorldParams,
   rng: () => number,
+  proximityOffset: number = 0,
+  extraDensity: number = 0,
+  snowline: number = 0.85,
+  bandCount: number = 1,
 ): void {
   const { cosM, sinM, worldR } = params;
 
@@ -121,56 +141,66 @@ function paintMountains(
   const perpZ = cosM;
 
   // 在山脉带两侧各取 5-8 个山峰采样点
-  const peakCount = 5 + Math.floor(rng() * 4); // 5-8
+  const peakCount = 5 + Math.floor(rng() * 4) + extraDensity; // 5-8 + extraDensity
 
-  for (let i = 0; i < peakCount; i++) {
-    // 沿山脉方向的位置
-    const along = (rng() - 0.5) * worldR * 1.8;
-    // 垂直于山脉方向的偏移（山脉带宽）
-    const across = (worldR * 0.6) + rng() * worldR * 0.5;
+  for (let band = 0; band < bandCount; band++) {
+    // 第二条山带方位角偏转 150°
+    const bandAngle = band === 0 ? 0 : Math.PI * (5 / 6);
+    const cosBand = Math.cos(bandAngle), sinBand = Math.sin(bandAngle);
 
-    const cx = cosM * along + perpX * across;
-    const cz = sinM * along + perpZ * across;
+    for (let i = 0; i < peakCount; i++) {
+      // 沿山脉方向的位置
+      const along = (rng() - 0.5) * worldR * 1.8;
+      // 垂直于山脉方向的偏移（山脉带宽）
+      const across = (worldR * 0.6 + proximityOffset) + rng() * worldR * 0.5;
 
-    const peakH = 8 + rng() * 12; // 山峰高度
-    const baseW = 10 + rng() * 8; // 山基宽度
+      const bandCosM = band === 0 ? cosM : cosM * cosBand - sinM * sinBand;
+      const bandSinM = band === 0 ? sinM : sinM * cosBand + cosM * sinBand;
+      const bandPerpX = band === 0 ? perpX : -bandSinM;
+      const bandPerpZ = band === 0 ? perpZ : bandCosM;
+      const cx = bandCosM * along + bandPerpX * across;
+      const cz = bandSinM * along + bandPerpZ * across;
 
-    // 生成锯齿折线峰线（4-6 个锯齿折点）
-    const zigCount = 4 + Math.floor(rng() * 3); // 4-6
-    const zigPts: [number, number][] = [];
+      const peakH = 8 + rng() * 12; // 山峰高度
+      const baseW = 10 + rng() * 8; // 山基宽度
 
-    // 山脚左
-    zigPts.push([cx - baseW, cz]);
-    // 中间锯齿
-    for (let z = 0; z < zigCount; z++) {
-      const t = (z + 1) / (zigCount + 1);
-      const px = cx - baseW + t * baseW * 2 + (rng() - 0.5) * 3;
-      const pz = cz - peakH * Math.sin(Math.PI * t) - rng() * 2;
-      zigPts.push([px, pz]);
+      // 生成锯齿折线峰线（4-6 个锯齿折点）
+      const zigCount = 4 + Math.floor(rng() * 3); // 4-6
+      const zigPts: [number, number][] = [];
+
+      // 山脚左
+      zigPts.push([cx - baseW, cz]);
+      // 中间锯齿
+      for (let z = 0; z < zigCount; z++) {
+        const t = (z + 1) / (zigCount + 1);
+        const px = cx - baseW + t * baseW * 2 + (rng() - 0.5) * 3;
+        const pz = cz - peakH * Math.sin(Math.PI * t) - rng() * 2;
+        zigPts.push([px, pz]);
+      }
+      // 山脚右
+      zigPts.push([cx + baseW, cz]);
+
+      // 绘制山峰轮廓
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+      wobblyPath(ctx, rng, zigPts, 0.8);
+      ctx.stroke();
+
+      // 顶部雪帽（两笔短线）
+      const snowY = cz - peakH * snowline;
+      const snowW = baseW * 0.25;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.snow;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.22;
+      ctx.beginPath();
+      ctx.moveTo(cx - snowW, snowY + 1.5);
+      ctx.lineTo(cx, snowY - 1.5);
+      ctx.lineTo(cx + snowW, snowY + 1.5);
+      ctx.stroke();
+
+      // 山脚排线
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
+      hatchRect(ctx, rng, cx - baseW * 0.6, cz - peakH * 0.3, baseW * 1.2, peakH * 0.3, 6, PAPER.inkFaded);
     }
-    // 山脚右
-    zigPts.push([cx + baseW, cz]);
-
-    // 绘制山峰轮廓
-    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
-    wobblyPath(ctx, rng, zigPts, 0.8);
-    ctx.stroke();
-
-    // 顶部雪帽（两笔短线）
-    const snowY = cz - peakH * 0.85;
-    const snowW = baseW * 0.25;
-    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.snow;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.22;
-    ctx.beginPath();
-    ctx.moveTo(cx - snowW, snowY + 1.5);
-    ctx.lineTo(cx, snowY - 1.5);
-    ctx.lineTo(cx + snowW, snowY + 1.5);
-    ctx.stroke();
-
-    // 山脚排线
-    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
-    hatchRect(ctx, rng, cx - baseW * 0.6, cz - peakH * 0.3, baseW * 1.2, peakH * 0.3, 6, PAPER.inkFaded);
   }
 }
 
@@ -319,6 +349,366 @@ function paintLakes(
     }
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 层 3sea — 海洋（harbor 专属）                                        */
+/* ------------------------------------------------------------------ */
+
+function paintSea(
+  ctx: CanvasRenderingContext2D,
+  params: WorldParams,
+  rng: () => number,
+): void {
+  const sea = params.seaData;
+  if (!sea) return;
+  const { coastPts, islands, lighthousePos, piers, sideAngle } = sea;
+  if (coastPts.length < 2) return;
+
+  // 海面填充多边形：沿海岸线采样 + 外扩 800 单位闭合
+  const cosSide = Math.cos(sideAngle), sinSide = Math.sin(sideAngle);
+  (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.moveTo(coastPts[0][0], coastPts[0][1]);
+  for (const [cx2, cz2] of coastPts) ctx.lineTo(cx2, cz2);
+  // 外扩到海里方向 800 单位
+  const farPts = [...coastPts].reverse().map(([px, pz]): [number, number] => [
+    px + cosSide * 800,
+    pz + sinSide * 800,
+  ]);
+  for (const [fx, fz] of farPts) ctx.lineTo(fx, fz);
+  ctx.closePath();
+  ctx.fill();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 海岸线（抖动）
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.20;
+  wobblyPath(ctx, rng, coastPts, 1.2);
+  ctx.stroke();
+
+  // 沙滩带（岸内侧 3 世界单位 sand 色条）
+  const sandColor = '#e8d8a0';
+  (ctx as unknown as Record<string, unknown>).strokeStyle = sandColor;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 3;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.35;
+  wobblyPath(ctx, rng, coastPts, 0.5);
+  ctx.stroke();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 3 层波浪短线群（离岸越远越稀）
+  for (let layer = 0; layer < 3; layer++) {
+    const waveCount = 8 - layer * 2;
+    const waveOff = 15 + layer * 25;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.15 + layer * 0.05;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    for (let w = 0; w < waveCount; w++) {
+      const idx = Math.floor(rng() * (coastPts.length - 1));
+      const [wx, wz] = coastPts[idx];
+      const wfx = wx + cosSide * (waveOff + rng() * 10);
+      const wfz = wz + sinSide * (waveOff + rng() * 10);
+      ctx.beginPath();
+      ctx.moveTo(wfx - 8, wfz);
+      ctx.quadraticCurveTo(wfx, wfz + (rng() - 0.5) * 4, wfx + 8, wfz);
+      ctx.stroke();
+    }
+  }
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 浪花点
+  (ctx as unknown as Record<string, unknown>).fillStyle = '#ffffff';
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+  for (let i = 0; i < 8; i++) {
+    const idx = Math.floor(rng() * coastPts.length);
+    const [fx, fz] = coastPts[idx];
+    ctx.beginPath();
+    ctx.arc(fx + cosSide * (5 + rng() * 10), fz + sinSide * (5 + rng() * 10), 0.3 + rng() * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 小岛
+  for (const isl of islands) {
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#e8d4a0';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    wobblyCircle(ctx, rng, isl.x, isl.z, isl.r, 0.1);
+    ctx.fill();
+    wobblyCircle(ctx, rng, isl.x, isl.z, isl.r, 0.08);
+    ctx.stroke();
+    // 环岛浪线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.3;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+    wobblyCircle(ctx, rng, isl.x, isl.z, isl.r + 2, 0.12);
+    ctx.stroke();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    // 岛上 1-2 棵树
+    const treeCount = 1 + Math.floor(rng() * 2);
+    for (let ti = 0; ti < treeCount; ti++) {
+      const tx2 = isl.x + (rng() - 0.5) * isl.r;
+      const tz2 = isl.z + (rng() - 0.5) * isl.r;
+      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+      scribbleBlob(ctx, rng, tx2, tz2, 1.2 + rng() * 0.6);
+      ctx.fill();
+      ctx.stroke();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    }
+  }
+
+  // 灯塔（红白环纹小塔 + 顶部光芒短线）
+  {
+    const { x: ltx, z: ltz } = lighthousePos;
+    const towerH = 4, towerW = 0.8;
+    // 塔身（白色）
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#f8f8f8';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    ctx.beginPath();
+    ctx.rect(ltx - towerW / 2, ltz - towerH, towerW, towerH);
+    ctx.fill();
+    ctx.stroke();
+    // 红色环纹（2 条）
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#d94040';
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+    ctx.fillRect(ltx - towerW / 2, ltz - towerH * 0.4, towerW, towerH * 0.18);
+    ctx.fillRect(ltx - towerW / 2, ltz - towerH * 0.75, towerW, towerH * 0.15);
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    // 顶部灯光短线（6 根放射线）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#f5d060';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+    for (let ri = 0; ri < 6; ri++) {
+      const ang = (ri / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(ltx, ltz - towerH);
+      ctx.lineTo(ltx + Math.cos(ang) * 2.5, ltz - towerH + Math.sin(ang) * 2.5);
+      ctx.stroke();
+    }
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+
+  // 码头栈桥（双线 + 横板短线，末端 2-3 艘帆船涂鸦）
+  for (const pier of piers) {
+    const cosPier = Math.cos(pier.angle), sinPier = Math.sin(pier.angle);
+    const pierLen = 12 + rng() * 6;
+    // 栈桥两侧线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#9a7a5e';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    const offset = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(pier.x - sinPier * offset, pier.z + cosPier * offset);
+    ctx.lineTo(pier.x - sinPier * offset + cosPier * pierLen, pier.z + cosPier * offset + sinPier * pierLen);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pier.x + sinPier * offset, pier.z - cosPier * offset);
+    ctx.lineTo(pier.x + sinPier * offset + cosPier * pierLen, pier.z - cosPier * offset + sinPier * pierLen);
+    ctx.stroke();
+    // 横板短线
+    const boardCount = Math.floor(pierLen / 1.5);
+    for (let bi = 0; bi < boardCount; bi++) {
+      const bd = (bi + 0.5) * 1.5;
+      const bx = pier.x + cosPier * bd;
+      const bz = pier.z + sinPier * bd;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = '#b89a7e';
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      ctx.beginPath();
+      ctx.moveTo(bx - sinPier * 0.8, bz + cosPier * 0.8);
+      ctx.lineTo(bx + sinPier * 0.8, bz - cosPier * 0.8);
+      ctx.stroke();
+    }
+    // 末端系泊帆船（2-3 艘，简化为小椭圆+三角帆）
+    const moored = 2 + Math.floor(rng() * 2);
+    for (let mi = 0; mi < moored; mi++) {
+      const mx = pier.x + cosPier * (pierLen + 1 + mi * 2.5);
+      const mz = pier.z + sinPier * (pierLen + 1 + mi * 2.5);
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#9a7a5e';
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
+      wobblyCircle(ctx, rng, mx, mz, 0.7, 0.08);
+      ctx.fill();
+      ctx.stroke();
+      // 帆（三角）
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#f0ead8';
+      ctx.beginPath();
+      ctx.moveTo(mx, mz - 0.8);
+      ctx.lineTo(mx + 0.6, mz + 0.2);
+      ctx.lineTo(mx, mz + 0.1);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // 海鸥（3-5 个小 V 字散布海面上空）
+  const gullCount = 3 + Math.floor(rng() * 3);
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  for (let gi = 0; gi < gullCount; gi++) {
+    const idx = Math.floor(rng() * coastPts.length);
+    const [gx, gz] = coastPts[idx];
+    const gfx = gx + cosSide * (20 + rng() * 40);
+    const gfz = gz + sinSide * (20 + rng() * 40);
+    const span = 1.2 + rng() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(gfx - span, gfz);
+    ctx.quadraticCurveTo(gfx, gfz - span * 0.4, gfx + span, gfz);
+    ctx.stroke();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 层 3frozen — 冻河（snow 专属）                                       */
+/* ------------------------------------------------------------------ */
+
+function paintFrozenRiver(
+  ctx: CanvasRenderingContext2D,
+  params: WorldParams,
+  rng: () => number,
+): void {
+  const { RIVER_W, riverWorld, T } = params;
+  const step = 1;
+  const vMin = -T * 1.2;
+  const vMax = T * 1.2;
+
+  const pts: [number, number][] = [];
+  for (let v = vMin; v <= vMax; v += step) pts.push(riverWorld(v));
+  if (pts.length < 2) return;
+
+  const bankOffset = RIVER_W / 2 + 0.8;
+  const leftBank = offsetPolyline(pts, bankOffset);
+  const rightBank = offsetPolyline(pts, -bankOffset);
+
+  // 冰面填充（冰白）
+  (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.moveTo(leftBank[0][0], leftBank[0][1]);
+  for (const p of leftBank) ctx.lineTo(p[0], p[1]);
+  for (let i = rightBank.length - 1; i >= 0; i--) ctx.lineTo(rightBank[i][0], rightBank[i][1]);
+  ctx.closePath();
+  ctx.fill();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 冰边（冰蓝）
+  const iceEdge = '#8ab4d0';
+  (ctx as unknown as Record<string, unknown>).strokeStyle = iceEdge;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+  wobblyPath(ctx, rng, leftBank, 0.8);
+  ctx.stroke();
+  wobblyPath(ctx, rng, rightBank, 0.8);
+  ctx.stroke();
+
+  // 河面裂纹折线（2-3 条）
+  const crackCount = 2 + Math.floor(rng() * 2);
+  (ctx as unknown as Record<string, unknown>).strokeStyle = iceEdge;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  for (let c2 = 0; c2 < crackCount; c2++) {
+    const startIdx = Math.floor(rng() * (pts.length * 0.8));
+    const crackLen = 5 + Math.floor(rng() * 8);
+    const crackPts: [number, number][] = [];
+    for (let ck = 0; ck < crackLen; ck++) {
+      const ci = Math.min(pts.length - 1, startIdx + ck);
+      const cx2 = pts[ci][0] + (rng() - 0.5) * RIVER_W * 0.8;
+      const cz2 = pts[ci][1] + (rng() - 0.5) * RIVER_W * 0.3;
+      crackPts.push([cx2, cz2]);
+    }
+    wobblyPath(ctx, rng, crackPts, 0.3);
+    ctx.stroke();
+  }
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 局部未冻水洞（1-2 个深色圆）
+  const holeCount = 1 + Math.floor(rng() * 2);
+  for (let h = 0; h < holeCount; h++) {
+    const hi = Math.floor(rng() * pts.length);
+    const hx = pts[hi][0] + (rng() - 0.5) * RIVER_W * 0.5;
+    const hz = pts[hi][1] + (rng() - 0.5) * RIVER_W * 0.3;
+    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
+    wobblyCircle(ctx, rng, hx, hz, 1.5 + rng(), 0.15);
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 层 3torrent — 激流（mountain 专属）                                  */
+/* ------------------------------------------------------------------ */
+
+function paintTorrentRiver(
+  ctx: CanvasRenderingContext2D,
+  params: WorldParams,
+  rng: () => number,
+): void {
+  const { RIVER_W, riverWorld, T } = params;
+  const narrowW = RIVER_W * 0.55;
+  const step = 1;
+  const vMin = -T * 1.2, vMax = T * 1.2;
+
+  const pts: [number, number][] = [];
+  for (let v = vMin; v <= vMax; v += step) pts.push(riverWorld(v));
+  if (pts.length < 2) return;
+
+  const bankOffset = narrowW / 2 + 0.5;
+  const leftBank = offsetPolyline(pts, bankOffset);
+  const rightBank = offsetPolyline(pts, -bankOffset);
+
+  // 窄河填充
+  (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(leftBank[0][0], leftBank[0][1]);
+  for (const p of leftBank) ctx.lineTo(p[0], p[1]);
+  for (let i = rightBank.length - 1; i >= 0; i--) ctx.lineTo(rightBank[i][0], rightBank[i][1]);
+  ctx.closePath();
+  ctx.fill();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 岸线
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+  wobblyPath(ctx, rng, leftBank, 0.6);
+  ctx.stroke();
+  wobblyPath(ctx, rng, rightBank, 0.6);
+  ctx.stroke();
+
+  // 河内密集流线短线群（激流感）
+  const flowCount = 12 + Math.floor(rng() * 8);
+  (ctx as unknown as Record<string, unknown>).strokeStyle = '#c8e4f0';
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  for (let f = 0; f < flowCount; f++) {
+    const fIdx = Math.floor(rng() * (pts.length - 3));
+    const fx = pts[fIdx][0] + (rng() - 0.5) * narrowW * 0.6;
+    const fz = pts[fIdx][1] + (rng() - 0.5) * narrowW * 0.2;
+    const fx2 = pts[fIdx + 2][0] + (rng() - 0.5) * narrowW * 0.4;
+    const fz2 = pts[fIdx + 2][1] + (rng() - 0.5) * narrowW * 0.2;
+    ctx.beginPath();
+    ctx.moveTo(fx, fz);
+    ctx.lineTo(fx2, fz2);
+    ctx.stroke();
+  }
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 跨涧石点（5-8 个深色椭圆）
+  const stoneCount = 5 + Math.floor(rng() * 4);
+  (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.mountain;
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.08;
+  for (let si = 0; si < stoneCount; si++) {
+    const si2 = Math.floor(rng() * pts.length);
+    const sx = pts[si2][0] + (rng() - 0.5) * narrowW;
+    const sz = pts[si2][1] + (rng() - 0.5) * narrowW * 0.3;
+    wobblyCircle(ctx, rng, sx, sz, 0.5 + rng() * 0.5, 0.2);
+    ctx.fill();
+    ctx.stroke();
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -899,21 +1289,46 @@ export function buildCityPainter(
     const maxX = (xs.length ? Math.max(...xs) : 60) + expand;
     const maxZ = (zs.length ? Math.max(...zs) : 60) + expand;
 
+    // 层 1 中的纸底色使用 biome ground
+    const biome = getBiome(city.theme);
+
     // 层 1 — 纸底
     const bgRng = rng0(wsPrefix + ':bg');
-    paintBackground(ctx, minX, minZ, maxX, maxZ, bgRng);
+    paintBackground(ctx, minX, minZ, maxX, maxZ, bgRng, biome.ground.paper, biome.ground.patch);
 
-    // 层 2 — 山脉
+    // 层 2 — 山脉（按 biome 参数）
     const mtnRng = rng0(wsPrefix + ':mtn');
-    paintMountains(ctx, params, mtnRng);
+    const mSpec = biome.mountains;
+    const isMountain = city.theme === 'mountain';
+    paintMountains(
+      ctx, params, mtnRng,
+      mSpec.proximity, mSpec.density, mSpec.snowline,
+      isMountain ? 2 : 1,
+    );
 
-    // 层 3a — 河流
-    const riverRng = rng0(wsPrefix + ':river');
-    paintRiver(ctx, params, riverRng);
-
-    // 层 3b — 运河
-    const canalRng = rng0(wsPrefix + ':canal');
-    paintCanal(ctx, params, canalRng);
+    // 层 3 — 水系（按 waterStyle 分派）
+    const waterStyle = params.waterStyle ?? 'river';
+    if (waterStyle === 'sea') {
+      const seaRng = rng0(wsPrefix + ':sea');
+      paintSea(ctx, params, seaRng);
+      // harbor 无大河，跳过 paintRiver / paintCanal
+    } else if (waterStyle === 'frozen') {
+      const frozenRng = rng0(wsPrefix + ':frozen');
+      paintFrozenRiver(ctx, params, frozenRng);
+      // 仍绘制运河（但冻河版本会在 paintCanal 中保持不变）
+      const canalRng = rng0(wsPrefix + ':canal');
+      paintCanal(ctx, params, canalRng);
+    } else if (waterStyle === 'torrent') {
+      const torrentRng = rng0(wsPrefix + ':torrent');
+      paintTorrentRiver(ctx, params, torrentRng);
+      // mountain 无运河（canalPts 原则上正常生成，但 mountain 忽略它）
+    } else {
+      // river（plains 默认）
+      const riverRng = rng0(wsPrefix + ':river');
+      paintRiver(ctx, params, riverRng);
+      const canalRng = rng0(wsPrefix + ':canal');
+      paintCanal(ctx, params, canalRng);
+    }
 
     // 层 3c — 湖泊
     paintLakes(ctx, params, wsPrefix);

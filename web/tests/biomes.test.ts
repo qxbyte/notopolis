@@ -109,3 +109,83 @@ describe('worldParams — snow/mountain mountains', () => {
     expect(p.waterStyle).toBe('torrent');
   });
 });
+
+import { buildCityPainter } from '../src/render2d/citypainter';
+import type { CityModel, District } from '@shared/types';
+
+function makeMockCtx() {
+  const calls: string[] = [];
+  const ctx = new Proxy({} as CanvasRenderingContext2D, {
+    get(_t, prop: string) {
+      if (prop === 'strokeStyle' || prop === 'fillStyle' || prop === 'lineWidth' || prop === 'globalAlpha') return 1;
+      return (..._args: unknown[]) => { calls.push(prop as string); };
+    },
+    set() { return true; },
+  });
+  return { ctx, calls };
+}
+
+function makeCity(theme: string): CityModel {
+  return {
+    vaultId: 'test-biome', name: 'TestCity', theme, tier: 'village',
+    districts: [{
+      dir: 'alpha', x: 5, z: 5, width: 20, depth: 20,
+      polygon: [[0, 0], [20, 0], [20, 20], [0, 20]] as [number, number][],
+      isInbox: false,
+      buildings: [{
+        notePath: 'alpha/a.md', title: 'A', x: 10, z: 10, rotY: 0, size: 1,
+        landmark: false, construction: false, isCivic: false, mainStreet: false,
+        mtimeMs: Date.now(), wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '',
+      }],
+    }],
+    roads: [{ kind: 'main', points: [[0, 0], [50, 0]] }],
+    noteCount: 1, activeCount7d: 1, generatedAt: Date.now(),
+  };
+}
+
+const THEMES = ['plains', 'harbor', 'snow', 'mountain'] as const;
+
+describe('buildCityPainter — 四主题不抛异常', () => {
+  for (const theme of THEMES) {
+    it(`${theme}: drawStatic 不抛异常`, () => {
+      const city = makeCity(theme);
+      const p = worldParams('vault-' + theme, 50, 50, 200, 200, theme);
+      const painter = buildCityPainter(city, p, 'ws-' + theme);
+      const { ctx } = makeMockCtx();
+      expect(() => painter.drawStatic(ctx)).not.toThrow();
+    });
+  }
+});
+
+describe('buildCityPainter — 四主题确定性', () => {
+  for (const theme of THEMES) {
+    it(`${theme}: 两次 drawStatic 调用序列相同`, () => {
+      const city = makeCity(theme);
+      const p = worldParams('vault-' + theme, 50, 50, 200, 200, theme);
+      const painter = buildCityPainter(city, p, 'ws-' + theme);
+      const { ctx: ctx1, calls: c1 } = makeMockCtx();
+      const { ctx: ctx2, calls: c2 } = makeMockCtx();
+      painter.drawStatic(ctx1);
+      painter.drawStatic(ctx2);
+      expect(c1).toEqual(c2);
+      expect(c1.length).toBeGreaterThan(20);
+    });
+  }
+});
+
+describe('buildCityPainter — 主题分支生效', () => {
+  it('plains 与 harbor 调用序列不同（证明分支生效）', () => {
+    const pCity = makeCity('plains');
+    const hCity = makeCity('harbor');
+    const pParams = worldParams('vault-plains', 50, 50, 200, 200, 'plains');
+    const hParams = worldParams('vault-harbor', 50, 50, 200, 200, 'harbor');
+    const pp = buildCityPainter(pCity, pParams, 'ws-plains');
+    const hp = buildCityPainter(hCity, hParams, 'ws-harbor');
+    const { ctx: pCtx, calls: pCalls } = makeMockCtx();
+    const { ctx: hCtx, calls: hCalls } = makeMockCtx();
+    pp.drawStatic(pCtx);
+    hp.drawStatic(hCtx);
+    // 两者调用序列不完全相同（至少某处不同）
+    expect(pCalls).not.toEqual(hCalls);
+  });
+});
