@@ -23,11 +23,15 @@ function clamp(v: number, lo: number, hi: number): number {
 export function createCamera2D(
   canvas: HTMLCanvasElement,
   worldBounds: { minX: number; minZ: number; maxX: number; maxZ: number },
+  fitBounds?: { minX: number; minZ: number; maxX: number; maxZ: number },
 ): Camera2D {
   const { minX, minZ, maxX, maxZ } = worldBounds;
 
-  const boundsW = maxX - minX;
-  const boundsH = maxZ - minZ;
+  // fitBounds 用于初始镜头 fit（默认与 worldBounds 相同）
+  const fb = fitBounds ?? worldBounds;
+
+  const boundsW = fb.maxX - fb.minX;
+  const boundsH = fb.maxZ - fb.minZ;
 
   const fitX = canvas.width  / boundsW;
   const fitZ = canvas.height / boundsH;
@@ -38,8 +42,8 @@ export function createCamera2D(
 
   let zoom = fit;
   const center = {
-    x: (minX + maxX) / 2,
-    z: (minZ + maxZ) / 2,
+    x: (fb.minX + fb.maxX) / 2,
+    z: (fb.minZ + fb.maxZ) / 2,
   };
 
   const listeners: Array<() => void> = [];

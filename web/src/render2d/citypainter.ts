@@ -408,10 +408,29 @@ function paintDistricts(
     const h3 = (bboxMaxZ - bboxMinZ) / 3;
     hatchRect(ctx, rng, bboxMinX, bboxMinZ, w3, h3, 8, PAPER.inkFaded);
 
-    // 区名标签
-    (ctx as unknown as Record<string, unknown>).font = "italic 13px 'Patrick Hand', cursive";
-    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.ink;
-    ctx.fillText(district.dir || 'inbox', district.x, district.z);
+    // 区名标签（字号按街区宽度等比缩放，世界坐标下 px 即世界单位）
+    const labelMinWidth = 8; // 街区太小不画标签
+    if (district.width >= labelMinWidth) {
+      const fontSize = Math.min(3.5, district.width * 0.16);
+      const cx = (bboxMinX + bboxMaxX) / 2;
+      const cz = (bboxMinZ + bboxMaxZ) / 2;
+
+      // 描边（paper 色，模拟纸底）
+      (ctx as unknown as Record<string, unknown>).font = `italic ${fontSize}px cursive`;
+      (ctx as unknown as Record<string, unknown>).textAlign = 'center';
+      (ctx as unknown as Record<string, unknown>).textBaseline = 'middle';
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
+      (ctx as unknown as Record<string, unknown>).lineWidth = fontSize * 0.4;
+      ctx.strokeText(district.dir || 'inbox', cx, cz);
+
+      // 填充（ink 色）
+      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.ink;
+      ctx.fillText(district.dir || 'inbox', cx, cz);
+
+      // 重置 textAlign/textBaseline 以免影响其它绘制
+      (ctx as unknown as Record<string, unknown>).textAlign = 'start';
+      (ctx as unknown as Record<string, unknown>).textBaseline = 'alphabetic';
+    }
   }
 }
 

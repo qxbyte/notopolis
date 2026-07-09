@@ -12,6 +12,7 @@ import { hitTest } from '../render2d/hit';
 import type { HitItem } from '../render2d/hit';
 import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
+import { PAPER } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
 
@@ -34,10 +35,24 @@ export function showCity2D(
   // ---- 1. 计算城市几何尺寸 ----
   const xs = city.districts.flatMap((d) => [d.x, d.x + d.width]);
   const zs = city.districts.flatMap((d) => [d.z, d.z + d.depth]);
-  const minX = Math.min(...xs, -10);
-  const maxX = Math.max(...xs, 10);
-  const minZ = Math.min(...zs, -10);
-  const maxZ = Math.max(...zs, 10);
+  const cityMinX = Math.min(...xs, -10);
+  const cityMaxX = Math.max(...xs, 10);
+  const cityMinZ = Math.min(...zs, -10);
+  const cityMaxZ = Math.max(...zs, 10);
+  const minX = cityMinX;
+  const maxX = cityMaxX;
+  const minZ = cityMinZ;
+  const maxZ = cityMaxZ;
+
+  // 城市 bbox（含 10% 余量），用于初始镜头 fit
+  const cityPadX = (cityMaxX - cityMinX) * 0.1;
+  const cityPadZ = (cityMaxZ - cityMinZ) * 0.1;
+  const cityFitBounds = {
+    minX: cityMinX - cityPadX,
+    maxX: cityMaxX + cityPadX,
+    minZ: cityMinZ - cityPadZ,
+    maxZ: cityMaxZ + cityPadZ,
+  };
   const cityHalfW = (maxX - minX) / 2;
   const cityHalfD = (maxZ - minZ) / 2;
   const worldR = Math.max(cityHalfW, cityHalfD) + 14;
@@ -97,8 +112,8 @@ export function showCity2D(
 
   const ctx = canvas.getContext('2d')!;
 
-  // ---- 9. 相机 ----
-  const camera = createCamera2D(canvas, expandedBounds);
+  // ---- 9. 相机（初始 fit 城市 bbox，平移钳制用大世界 bounds）----
+  const camera = createCamera2D(canvas, expandedBounds, cityFitBounds);
 
   // ---- 10. HUD + 返回按钮 ----
   const hud = createHUD(container);
@@ -138,7 +153,9 @@ export function showCity2D(
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 先以纸底色填满整个 canvas（世界图边界外也是纸面，而不是透明/蓝色）
+    ctx.fillStyle = PAPER.paper;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // blit 内部会调用 camera.apply，绘制完毕后 camera transform 保持激活
     world.blit(ctx, camera);
@@ -195,6 +212,13 @@ export function showCity2D(
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('mousemove', onMouseMove);
 
+  // ---- 17. Resize ----
+  function onResize(): void {
+    canvas.width  = container.clientWidth  * dpr;
+    canvas.height = container.clientHeight * dpr;
+  }
+  window.addEventListener('resize', onResize);
+
   return {
     pickableCount: hitItems.filter((i) => i.kind === 'building').length,
 
@@ -222,6 +246,7 @@ export function showCity2D(
       cancelAnimationFrame(animId);
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
       camera.dispose();
       canvas.remove();
       hud.root.remove();

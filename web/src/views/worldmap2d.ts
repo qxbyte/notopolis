@@ -330,7 +330,9 @@ export function showWorldMap2D(
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // 先以纸底色填满整个 canvas，世界图边界外也是纸面
+    ctx.fillStyle = PAPER.paper;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 应用相机变换
     camera.apply(ctx);
@@ -378,11 +380,19 @@ export function showWorldMap2D(
 
   animId = requestAnimationFrame(loop);
 
+  // ---- Resize ----
+  function onResize(): void {
+    canvas.width  = container.clientWidth  * dpr;
+    canvas.height = container.clientHeight * dpr;
+  }
+  window.addEventListener('resize', onResize);
+
   return {
     dispose(): void {
       cancelAnimationFrame(animId);
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
       camera.dispose();
       canvas.remove();
       tooltip.remove();
