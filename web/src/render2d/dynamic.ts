@@ -785,20 +785,61 @@ export function createDynamicLayer(
       drawTrain(ctx, tx, tz, tAng, i === 0, t);
     }
 
-    // ---- 帆船 ----
-    const { riverWorld, T } = params;
-    const bv = ((t * 2.2) % (T * 1.2)) - T * 0.6;
-    const [bx1, bz1] = riverWorld(bv);
-    const [bx2, bz2] = riverWorld(bv + 1);
-    const boatAng = Math.atan2(bx2 - bx1, bz2 - bz1);
-    drawBoat(ctx, bx1, bz1, boatAng);
+    // ---- 帆船 / 快艇 — 按 waterStyle 分派 ----
+    const waterStyle = params.waterStyle ?? 'river';
 
-    // ---- 快艇 ----
-    const sv = T * 0.6 - ((t * 7) % (T * 1.2));
-    const [sx1, sz1] = riverWorld(sv);
-    const [sx2, sz2] = riverWorld(sv - 1);
-    const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
-    drawSpeedboat(ctx, sx1, sz1, sbAng);
+    if (waterStyle === 'frozen') {
+      // 冻河：不出船
+    } else if (waterStyle === 'sea' && params.seaData) {
+      // 海：沿海岸线采样点巡航
+      const coastPts = params.seaData.coastPts;
+      if (coastPts.length >= 2) {
+        const ci1 = Math.floor(((t * 2.2) % 1) * (coastPts.length - 1));
+        const ci2 = Math.min(coastPts.length - 1, ci1 + 1);
+        const [bx1, bz1] = coastPts[ci1];
+        const [bx2, bz2] = coastPts[ci2];
+        const boatAng = Math.atan2(bx2 - bx1, bz2 - bz1);
+        const cosSide = Math.cos(params.seaData.sideAngle);
+        const sinSide = Math.sin(params.seaData.sideAngle);
+        // 在海岸线往海里偏移 20-30 单位
+        const boatOffDist = 20 + 10 * ((t * 0.1) % 1);
+        drawBoat(ctx, bx1 + cosSide * boatOffDist, bz1 + sinSide * boatOffDist, boatAng);
+        // 快艇（在另一侧）
+        const ci3 = Math.floor(((1 - (t * 0.6) % 1)) * (coastPts.length - 1));
+        const ci4 = Math.max(0, ci3 - 1);
+        const [sx1, sz1] = coastPts[ci3];
+        const [sx2, sz2] = coastPts[ci4];
+        const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
+        drawSpeedboat(ctx, sx1 + cosSide * 35, sz1 + sinSide * 35, sbAng);
+      }
+    } else if (waterStyle === 'torrent') {
+      // 激流：只出小舟（用 drawBoat 缩小）——在窄河上漂
+      const { riverWorld: rw2, T: T2 } = params;
+      const bv2 = ((t * 3.5) % (T2 * 1.2)) - T2 * 0.6;
+      const [bx3, bz3] = rw2(bv2);
+      const [bx4, bz4] = rw2(bv2 + 0.5);
+      const boatAng2 = Math.atan2(bx4 - bx3, bz4 - bz3);
+      ctx.save();
+      ctx.translate(bx3, bz3);
+      ctx.scale(0.6, 0.6);
+      ctx.translate(-bx3, -bz3);
+      drawBoat(ctx, bx3, bz3, boatAng2);
+      ctx.restore();
+    } else {
+      // river（plains 默认）— 原逻辑
+      const { riverWorld, T } = params;
+      const bv = ((t * 2.2) % (T * 1.2)) - T * 0.6;
+      const [bx1, bz1] = riverWorld(bv);
+      const [bx2, bz2] = riverWorld(bv + 1);
+      const boatAng = Math.atan2(bx2 - bx1, bz2 - bz1);
+      drawBoat(ctx, bx1, bz1, boatAng);
+
+      const sv = T * 0.6 - ((t * 7) % (T * 1.2));
+      const [sx1, sz1] = riverWorld(sv);
+      const [sx2, sz2] = riverWorld(sv - 1);
+      const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
+      drawSpeedboat(ctx, sx1, sz1, sbAng);
+    }
 
     // ---- 飞机 ----
     const a = t * 0.1;

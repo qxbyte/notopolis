@@ -189,3 +189,49 @@ describe('buildCityPainter — 主题分支生效', () => {
     expect(pCalls).not.toEqual(hCalls);
   });
 });
+
+import { createDynamicLayer } from '../src/render2d/dynamic';
+
+function makeDynCtx() {
+  const calls: string[] = [];
+  const ctx = new Proxy({} as CanvasRenderingContext2D, {
+    get(_t, prop: string) {
+      if (['strokeStyle','fillStyle','lineWidth','globalAlpha'].includes(prop as string)) return 1;
+      return (..._args: unknown[]) => { calls.push(prop as string); };
+    },
+    set() { return true; },
+  });
+  return { ctx, calls };
+}
+
+describe('dynamic — waterStyle 适配', () => {
+  const baseCity: CityModel = {
+    vaultId: 'dyn-test', name: 'DynCity', theme: 'plains', tier: 'village',
+    districts: [], roads: [], noteCount: 0, activeCount7d: 2, generatedAt: Date.now(),
+  };
+
+  it('frozen 主题: draw() 不抛异常', () => {
+    const city: CityModel = { ...baseCity, theme: 'snow' };
+    const p = worldParams('vault-snow-dyn', HW, HD, WR, T, 'snow');
+    const layer = createDynamicLayer(city, p, 'ws-snow', []);
+    const { ctx } = makeDynCtx();
+    expect(() => layer.draw(ctx, 0)).not.toThrow();
+    expect(() => layer.draw(ctx, 1)).not.toThrow();
+  });
+
+  it('harbor 主题: draw() 不抛异常', () => {
+    const city: CityModel = { ...baseCity, theme: 'harbor' };
+    const p = worldParams('vault-harbor-dyn', HW, HD, WR, T, 'harbor');
+    const layer = createDynamicLayer(city, p, 'ws-harbor', []);
+    const { ctx } = makeDynCtx();
+    expect(() => layer.draw(ctx, 0)).not.toThrow();
+  });
+
+  it('mountain 主题: draw() 不抛异常', () => {
+    const city: CityModel = { ...baseCity, theme: 'mountain' };
+    const p = worldParams('vault-mountain-dyn', HW, HD, WR, T, 'mountain');
+    const layer = createDynamicLayer(city, p, 'ws-mountain', []);
+    const { ctx } = makeDynCtx();
+    expect(() => layer.draw(ctx, 0)).not.toThrow();
+  });
+});
