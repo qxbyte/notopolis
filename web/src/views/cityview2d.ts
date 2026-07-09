@@ -51,9 +51,9 @@ export function showCity2D(
   const minZ = cityMinZ;
   const maxZ = cityMaxZ;
 
-  // 城市 bbox（含 10% 余量），用于初始镜头 fit
-  const cityPadX = (cityMaxX - cityMinX) * 0.1;
-  const cityPadZ = (cityMaxZ - cityMinZ) * 0.1;
+  // 城市 bbox（含 35% 余量——入城第一眼能看到周边地貌：海岸/山脉/雪原），用于初始镜头 fit
+  const cityPadX = (cityMaxX - cityMinX) * 0.35;
+  const cityPadZ = (cityMaxZ - cityMinZ) * 0.35;
   const cityFitBounds = {
     minX: cityMinX - cityPadX,
     maxX: cityMaxX + cityPadX,
