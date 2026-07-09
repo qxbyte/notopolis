@@ -48,6 +48,16 @@ describe('placeBuildings', () => {
     expect(tf.inlinks).toBe(3);
   });
 
+  it('Building.outlinks 反映已解析出链', async () => {
+    const { notes, graph } = await aiNotes();
+    const placed = placeBuildings(PLOT, notes, graph.inlinks, undefined, graph.outlinks);
+    const tf = placed.find((x) => x.title === 'Transformer')!;
+    expect(tf.outlinks).toContain('01-AI/RAG.md');
+    // 未传 outlinks 时默认空数组（不丢字段）
+    const placedNoOut = placeBuildings(PLOT, notes, graph.inlinks);
+    expect(placedNoOut.every((b) => Array.isArray(b.outlinks))).toBe(true);
+  });
+
   it('多边形约束：所有建筑坐标在 plot.polygon 内，且笔记数 === 建筑数（不丢楼）', async () => {
     const { notes, graph } = await aiNotes();
     const placed = placeBuildings(PLOT, notes, graph.inlinks);

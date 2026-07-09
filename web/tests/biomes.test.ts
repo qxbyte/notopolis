@@ -135,7 +135,7 @@ function makeCity(theme: string): CityModel {
       buildings: [{
         notePath: 'alpha/a.md', title: 'A', x: 10, z: 10, rotY: 0, size: 1,
         landmark: false, construction: false, isCivic: false, mainStreet: false,
-        mtimeMs: Date.now(), wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '',
+        mtimeMs: Date.now(), wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '', outlinks: [],
       }],
     }],
     roads: [{ kind: 'main', points: [[0, 0], [50, 0]] }],

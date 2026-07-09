@@ -20,17 +20,17 @@ const distA: District = {
     {
       notePath: 'alpha/a.md', title: 'A', x: 5, z: 5, rotY: 0, size: 1,
       landmark: false, construction: false, isCivic: false, mainStreet: false,
-      mtimeMs: NOW, wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '',
+      mtimeMs: NOW, wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '', outlinks: [],
     },
     {
       notePath: 'alpha/b.md', title: 'B', x: 10, z: 10, rotY: 0, size: 2,
       landmark: true, construction: false, isCivic: false, mainStreet: false,
-      mtimeMs: NOW, wordCount: 200, inlinks: 5, openTasks: 0, excerpt: '',
+      mtimeMs: NOW, wordCount: 200, inlinks: 5, openTasks: 0, excerpt: '', outlinks: [],
     },
     {
       notePath: 'alpha/c.md', title: 'C', x: 15, z: 15, rotY: 0, size: 3,
       landmark: false, construction: true, isCivic: false, mainStreet: false,
-      mtimeMs: NOW, wordCount: 50, inlinks: 0, openTasks: 3, excerpt: '',
+      mtimeMs: NOW, wordCount: 50, inlinks: 0, openTasks: 3, excerpt: '', outlinks: [],
     },
   ],
 };
@@ -43,12 +43,12 @@ const distB: District = {
     {
       notePath: 'beta/d.md', title: 'D', x: 30, z: 5, rotY: 0, size: 1,
       landmark: false, construction: false, isCivic: true, mainStreet: false,
-      mtimeMs: NOW, wordCount: 300, inlinks: 10, openTasks: 0, excerpt: '',
+      mtimeMs: NOW, wordCount: 300, inlinks: 10, openTasks: 0, excerpt: '', outlinks: [],
     },
     {
       notePath: 'beta/e.md', title: 'E', x: 35, z: 15, rotY: 0, size: 1,
       landmark: false, construction: false, isCivic: false, mainStreet: false,
-      mtimeMs: YEAR_AGO, wordCount: 10, inlinks: 0, openTasks: 0, excerpt: '',
+      mtimeMs: YEAR_AGO, wordCount: 10, inlinks: 0, openTasks: 0, excerpt: '', outlinks: [],
     },
   ],
 };

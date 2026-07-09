@@ -18,7 +18,7 @@ function makeBuilding(x: number, z: number, notePath: string): Building {
     x, z,
     rotY: 0, size: 1,
     landmark: false, construction: false, isCivic: false, mainStreet: false,
-    mtimeMs: NOW, wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '',
+    mtimeMs: NOW, wordCount: 100, inlinks: 0, openTasks: 0, excerpt: '', outlinks: [],
   };
 }
 

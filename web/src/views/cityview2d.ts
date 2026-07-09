@@ -18,6 +18,7 @@ import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
 import { groupTasks, totalConstruction } from '../util/tasks';
 import { obsidianUri } from '../ui/obsidian';
+import { LENSES, lensById, gardenSetOf, lensHitBuildings, type LensId } from '../render2d/lenses';
 import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
@@ -55,6 +56,10 @@ export interface CityViewHandle {
   openTaskPanel(): void;
   closeTaskPanel(): void;
   taskPanelOpen(): boolean;
+  /** 切换透镜图层 */
+  setLens(id: LensId): void;
+  /** 当前透镜命中的 notePath 列表 */
+  lensHits(): string[];
 }
 
 export function showCity2D(
@@ -269,9 +274,45 @@ export function showCity2D(
   });
   taskPanel.refresh(groupTasks(city));
   const constructionN = totalConstruction(city);
-  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () =>
-    taskPanel.toggle(),
-  );
+  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () => {
+    taskPanel.toggle();
+    setLens(taskPanel.isOpen() ? 'tasks' : 'none');
+  });
+  // 面板经 Esc/✕ 关闭时还原透镜
+  taskPanel.onClose = () => {
+    if (lensId === 'tasks') setLens('none');
+  };
+
+  // ---- 12d. 透镜图层（F4/F5）----
+  const gardenSet = gardenSetOf(city);
+  let lensId: LensId = 'none';
+  let lensHitCache: import('@shared/types').Building[] = [];
+  const lensBtns = new Map<LensId, HTMLButtonElement>();
+
+  function setLens(id: LensId): void {
+    lensId = id;
+    lensHitCache = lensHitBuildings(city, id, { gardenSet });
+    // 按钮高亮
+    for (const [bid, btn] of lensBtns) btn.classList.toggle('active', bid === id);
+    // HUD 提示
+    const def = lensById(id);
+    if (id === 'none') {
+      hud.setTip('左键拖拽 平移地图 · 滚轮 缩放 · 点击建筑看笔记');
+    } else if (lensHitCache.length > 0) {
+      hud.setTip(`${def.label}视图 · 命中 ${lensHitCache.length} 栋`);
+    } else {
+      hud.setTip(def.emptyText || `${def.label}视图 · 无命中`);
+    }
+  }
+
+  for (const def of LENSES) {
+    const btn = document.createElement('button');
+    btn.className = 'lens-btn' + (def.id === 'none' ? ' active' : '');
+    btn.textContent = `${def.icon} ${def.label}`;
+    btn.addEventListener('click', () => setLens(def.id));
+    hud.lensBar.appendChild(btn);
+    lensBtns.set(def.id, btn);
+  }
 
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];
@@ -316,6 +357,34 @@ export function showCity2D(
 
     // 动态层在 camera transform 下以世界坐标绘制
     dynLayer.draw(ctx, t * 0.001);
+
+    // 透镜覆盖层（纸色遮罩压暗全图 + 命中建筑红环，静态层不重绘）
+    if (lensId !== 'none') {
+      const cc = ctx as unknown as Record<string, unknown>;
+      cc.fillStyle = PAPER.paper;
+      cc.globalAlpha = 0.55;
+      ctx.fillRect(
+        expandedBounds.minX,
+        expandedBounds.minZ,
+        expandedBounds.maxX - expandedBounds.minX,
+        expandedBounds.maxZ - expandedBounds.minZ,
+      );
+      cc.globalAlpha = 1;
+      const icon = lensById(lensId).icon;
+      const drawIcons = lensHitCache.length <= 150;
+      cc.strokeStyle = '#c0453a';
+      cc.lineWidth = 0.3;
+      cc.textAlign = 'center';
+      cc.font = '3.5px sans-serif';
+      for (const b of lensHitCache) {
+        const r = footprintR(b) + 1;
+        ctx.beginPath();
+        ctx.arc(b.x, b.z, r, 0, Math.PI * 2);
+        ctx.stroke();
+        if (drawIcons) ctx.fillText(icon, b.x, b.z - r - 0.6);
+      }
+      cc.textAlign = 'start';
+    }
 
     // 建筑高亮环（每帧覆盖层，印章红双圈脉冲，持续 3 秒）
     if (highlight) {
@@ -453,6 +522,13 @@ export function showCity2D(
     },
     taskPanelOpen(): boolean {
       return taskPanel.isOpen();
+    },
+
+    setLens(id: LensId): void {
+      setLens(id);
+    },
+    lensHits(): string[] {
+      return lensHitCache.map((b) => b.notePath);
     },
 
     pois: painter.pois,

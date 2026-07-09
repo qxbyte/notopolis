@@ -24,6 +24,7 @@ export function placeBuildings(
   notes: NoteMeta[],
   inlinks: Record<string, number>,
   roads: Road[] = buildDistrictRoads(plot),
+  outlinks: Record<string, string[]> = {},
 ): Building[] {
   const cols = Math.max(3, Math.floor(plot.width / CELL));
   const rows = Math.max(3, Math.floor(plot.depth / CELL));
@@ -174,6 +175,7 @@ export function placeBuildings(
       inlinks: inlinks[note.path] ?? 0,
       openTasks: note.openTasks,
       excerpt: note.excerpt,
+      outlinks: outlinks[note.path] ?? [],
     });
   }
   return out;

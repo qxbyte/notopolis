@@ -90,6 +90,7 @@ const makeBuilding = (overrides: Partial<Building> = {}): Building => ({
   inlinks: 5,
   openTasks: 0,
   excerpt: 'A short excerpt.',
+  outlinks: [],
   ...overrides,
 });
 

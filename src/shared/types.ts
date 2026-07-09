@@ -29,6 +29,7 @@ export interface ScanResult {
 
 export interface GraphResult {
   inlinks: Record<string, number>; // notePath -> 被引数
+  outlinks: Record<string, string[]>; // notePath -> 已解析的出链目标 notePath[]（去重、无自引用）
   orphans: string[];
   intraDirEdges: [string, string][]; // [fromPath, toPath] 同顶层目录
   crossDirEdges: [string, string][];
@@ -50,6 +51,7 @@ export interface Building {
   inlinks: number;
   openTasks: number;
   excerpt: string;
+  outlinks: string[]; // 已解析的出链目标 notePath[]（F4 透镜/F6 漫游用）
 }
 
 export interface District {

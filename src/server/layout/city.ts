@@ -42,7 +42,7 @@ export function buildCityModel(
     depth: plot.depth,
     polygon: plot.polygon,
     isInbox: /inbox/i.test(plot.dir),
-    buildings: placeBuildings(plot, byDir.get(plot.dir)!, graph.inlinks, buildDistrictRoads(plot)),
+    buildings: placeBuildings(plot, byDir.get(plot.dir)!, graph.inlinks, buildDistrictRoads(plot), graph.outlinks),
   }));
 
   return {

@@ -10,9 +10,9 @@ export function buildGraph(notes: NoteMeta[]): GraphResult {
   for (const n of notes) if (!byTitle.has(n.title)) byTitle.set(n.title, n.path);
 
   const inlinks: Record<string, number> = Object.fromEntries(notes.map((n) => [n.path, 0]));
+  const outlinks: Record<string, string[]> = Object.fromEntries(notes.map((n) => [n.path, []]));
   const intraDirEdges: [string, string][] = [];
   const crossDirEdges: [string, string][] = [];
-  const hasOutlink = new Set<string>();
 
   for (const n of notes) {
     for (const target of n.links) {
@@ -21,14 +21,14 @@ export function buildGraph(notes: NoteMeta[]): GraphResult {
         : byTitle.get(target.split('/').pop()!);
       if (!resolved || resolved === n.path) continue;
       inlinks[resolved]++;
-      hasOutlink.add(n.path);
+      if (!outlinks[n.path].includes(resolved)) outlinks[n.path].push(resolved); // 去重
       const edge: [string, string] = [n.path, resolved];
       (topDir(n.path) === topDir(resolved) ? intraDirEdges : crossDirEdges).push(edge);
     }
   }
 
   const orphans = notes
-    .filter((n) => inlinks[n.path] === 0 && !hasOutlink.has(n.path))
+    .filter((n) => inlinks[n.path] === 0 && outlinks[n.path].length === 0)
     .map((n) => n.path);
-  return { inlinks, orphans, intraDirEdges, crossDirEdges };
+  return { inlinks, outlinks, orphans, intraDirEdges, crossDirEdges };
 }
