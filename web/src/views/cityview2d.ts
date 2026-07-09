@@ -351,11 +351,19 @@ export function showCity2D(
     lensHitCache = lensHitBuildings(city, id, { gardenSet });
     // 按钮高亮
     for (const [bid, btn] of lensBtns) btn.classList.toggle('active', bid === id);
-    // 面板与透镜联动：tasks↔工地面板、garden↔园丁面板
-    if (id === 'tasks') taskPanel.open();
-    else taskPanel.close();
-    if (id === 'garden') gardenPanel.open();
-    else gardenPanel.close();
+    // 面板与透镜联动：tasks↔工地面板、garden↔园丁面板；面板与卡片互斥
+    if (id === 'tasks') {
+      cards.hide();
+      taskPanel.open();
+    } else {
+      taskPanel.close();
+    }
+    if (id === 'garden') {
+      cards.hide();
+      gardenPanel.open();
+    } else {
+      gardenPanel.close();
+    }
     // HUD 提示
     const def = lensById(id);
     if (id === 'none') {
@@ -548,22 +556,21 @@ export function showCity2D(
   // ---- 15. 点击 ----
   function onClick(e: MouseEvent): void {
     if (camera.consumeDragMoved()) return;
-    // 侧边栏展开时，点击地图空白处先收起面板（并还原透镜），本次点击不再拾取建筑
-    if (taskPanel.isOpen() || gardenPanel.isOpen()) {
-      setLens('none');
-      return;
-    }
+    const panelOpen = taskPanel.isOpen() || gardenPanel.isOpen();
     const [wx, wz] = camera.screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     const item = hitTest(wx, wz, hitItems);
     if (!item) {
-      cards.hide();
+      // 空白处：优先收起侧边栏，否则隐藏卡片
+      if (panelOpen) setLens('none');
+      else cards.hide();
       return;
     }
     if (item.kind === 'building') {
       const d = item.data as { type: 'building'; b: import('@shared/types').Building; dir: string };
-      showBuildingCard(d.b, d.dir);
+      showBuildingCard(d.b, d.dir); // 内部会收起侧边栏（互斥）
     } else if (item.kind === 'district') {
       const d = item.data as { type: 'district'; district: import('@shared/types').District };
+      if (panelOpen) setLens('none');
       cards.showDistrict(d.district, Date.now());
     }
   }
@@ -581,6 +588,8 @@ export function showCity2D(
 
   // 展示建筑卡片（带链接段 + 「打开」弹窗），供点击/搜索/定位/漫游共用
   function showBuildingCard(b: import('@shared/types').Building, dir: string): void {
+    // 卡片与侧边栏互斥：出卡片时先收起工地/园丁面板
+    if (taskPanel.isOpen() || gardenPanel.isOpen()) setLens('none');
     cards.showBuilding(b, dir, vault.path, linksFor(b.notePath), (notePath) =>
       noteModal.open(vault.id, notePath, b.title),
     );
@@ -669,10 +678,11 @@ export function showCity2D(
     },
 
     openTaskPanel(): void {
-      taskPanel.open();
+      setLens('tasks'); // 经 setLens 保证卡片互斥与透镜联动
     },
     closeTaskPanel(): void {
-      taskPanel.close();
+      if (lensId === 'tasks') setLens('none');
+      else taskPanel.close();
     },
     taskPanelOpen(): boolean {
       return taskPanel.isOpen();

@@ -44,6 +44,14 @@ export function createTaskPanel(
   }
   body.addEventListener('click', onBodyClick);
 
+  /** 笔记在其所属区（顶层目录）内的父目录路径，用于区分同名文档 */
+  function relDir(notePath: string, dir: string): string {
+    let rel = notePath.replace(/\.md$/, '');
+    if (dir && rel.startsWith(dir + '/')) rel = rel.slice(dir.length + 1);
+    const slash = rel.lastIndexOf('/');
+    return slash >= 0 ? rel.slice(0, slash) : '';
+  }
+
   function refresh(groups: TaskGroup[]): void {
     if (groups.length === 0) {
       body.innerHTML = '<div class="panel-empty">城中无施工工地。<br>去写点带 <b>- [ ]</b> 的计划，这里就会热闹起来。</div>';
@@ -53,9 +61,11 @@ export function createTaskPanel(
     for (const g of groups) {
       parts.push(`<div class="panel-group-head">${esc(g.dir || '(根目录)')} · ${g.total}</div>`);
       for (const it of g.items) {
+        const sub = relDir(it.notePath, g.dir);
+        const pathLine = sub ? `<div class="pi-path">${esc(sub)}</div>` : '';
         parts.push(
-          `<div class="panel-item" data-path="${esc(it.notePath)}">` +
-            `<span class="grow">🚧 ${esc(it.title)} · ${it.openTasks} 项</span>` +
+          `<div class="panel-item" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}">` +
+            `<div class="grow"><div class="pi-main">🚧 ${esc(it.title)} · ${it.openTasks} 项</div>${pathLine}</div>` +
             `<span class="act act-locate">定位</span>` +
             `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
             `</div>`,

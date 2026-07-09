@@ -46,20 +46,29 @@ export function createGardenPanel(
   }
   body.addEventListener('click', onBodyClick);
 
+  /** 笔记的父目录路径（vault 相对），用于区分同名文档 */
+  function parentDir(notePath: string): string {
+    const slash = notePath.lastIndexOf('/');
+    return slash >= 0 ? notePath.slice(0, slash) : '';
+  }
+
   function refresh(items: GardenItem[]): void {
     if (items.length === 0) {
       body.innerHTML = '<div class="panel-empty">城中还没有建筑。</div>';
       return;
     }
     body.innerHTML = items
-      .map(
-        (it) =>
-          `<div class="panel-item" data-path="${esc(it.notePath)}">` +
-          `<span class="grow">🌱 ${esc(it.title)} · ${it.daysSince} 天前 · ${esc(it.dir || '(根目录)')}</span>` +
+      .map((it) => {
+        const parent = parentDir(it.notePath);
+        const pathLine = parent ? `<div class="pi-path">${esc(parent)}</div>` : '';
+        return (
+          `<div class="panel-item" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}">` +
+          `<div class="grow"><div class="pi-main">🌱 ${esc(it.title)} · ${it.daysSince} 天前</div>${pathLine}</div>` +
           `<span class="act act-locate">定位</span>` +
           `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
-          `</div>`,
-      )
+          `</div>`
+        );
+      })
       .join('');
   }
 
