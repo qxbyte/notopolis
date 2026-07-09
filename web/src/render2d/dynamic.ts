@@ -1105,51 +1105,125 @@ export function createDynamicLayer(
     params: WorldParams,
   ): void {
     const airport = net.airport!;
+    const cosAng = Math.cos(airport.ang);
+    const sinAng = Math.sin(airport.ang);
+    const halfLen = airport.len / 2;  // 18
 
-    // 目标区（用种子确定性选择）
-    const targetDistrict = city.districts.length > 0
-      ? city.districts[0]
-      : null;
+    // 跑道两端（世界坐标）
+    const runwayEndA: [number, number] = [
+      airport.x - cosAng * halfLen,
+      airport.z - sinAng * halfLen,
+    ];
+    const runwayEndB: [number, number] = [
+      airport.x + cosAng * halfLen,
+      airport.z + sinAng * halfLen,
+    ];
+
+    // 停机坪中心（局部坐标转世界坐标）
+    // 局部坐标系：沿跑道 = local X，垂直 = local Z
+    // 世界坐标 = 旋转(ang) × 局部坐标 + 机场中心
+    const apronWorldX = airport.x + cosAng * airport.apron.dx - sinAng * airport.apron.dz;
+    const apronWorldZ = airport.z + sinAng * airport.apron.dx + cosAng * airport.apron.dz;
+
+    // 目标区（第一个区中心，若无区则取原点）
+    const targetDistrict = city.districts.length > 0 ? city.districts[0] : null;
     const targetX = targetDistrict ? targetDistrict.x + targetDistrict.width / 2 : 0;
     const targetZ = targetDistrict ? targetDistrict.z + targetDistrict.depth / 2 : 0;
+    const CRUISE_R = 18;
 
-    // 飞行周期 40 秒
-    const period = 40;
-    const p = (t % period) / period;  // 0..1
+    // 周期 60 秒
+    const period = 60;
+    const p = (t % period) / period;
 
-    let planeX: number, planeZ: number, planeAng: number;
+    // 段时长（秒）→ 归一化比例
+    const T_APRON  = 5 / period;   // 停机坪停留：[0, T_APRON)
+    const T_TAXIAB = 5 / period;   // 滑跑 A→B：[T_APRON, T_APRON+T_TAXIAB)
+    const T_CLIMB  = 8 / period;   // 爬升：[.., ..)
+    const T_CRUISE = 25 / period;  // 巡航：[.., ..)
+    const T_RETURN = 8 / period;   // 返航：[.., ..)
+    // 剩余 9s = 降落滑跑 B→A
 
-    if (p < 0.1) {
-      // 起飞阶段：在机场附近
-      const takeoffP = p / 0.1;
-      const runwayX = airport.x + Math.cos(airport.ang) * airport.len * 0.5 * takeoffP;
-      const runwayZ = airport.z + Math.sin(airport.ang) * airport.len * 0.5 * takeoffP;
-      planeX = runwayX;
-      planeZ = runwayZ;
+    const P1 = T_APRON;
+    const P2 = P1 + T_TAXIAB;
+    const P3 = P2 + T_CLIMB;
+    const P4 = P3 + T_CRUISE;
+    const P5 = P4 + T_RETURN;
+    // P6 = 1.0
+
+    // 巡航圆终点（ang=2π=0，即 ang=0 处）= (targetX + R, targetZ)
+    const cruiseEndX = targetX + CRUISE_R;
+    const cruiseEndZ = targetZ;
+
+    let planeX: number, planeZ: number, planeAng: number, drawScale: number;
+
+    if (p < P1) {
+      // 停机坪停留
+      planeX = apronWorldX;
+      planeZ = apronWorldZ;
       planeAng = airport.ang;
-    } else if (p < 0.9) {
-      // 巡航：绕目标区转圈
-      const circleP = (p - 0.1) / 0.8;
-      const circleAng = circleP * Math.PI * 2;
-      const radius = 15;
-      planeX = targetX + Math.cos(circleAng) * radius;
-      planeZ = targetZ + Math.sin(circleAng) * radius;
-      planeAng = circleAng + Math.PI / 2;
+      drawScale = 1.0;
+    } else if (p < P2) {
+      // 滑跑 A→B
+      const pp = (p - P1) / T_TAXIAB;
+      planeX = runwayEndA[0] + (runwayEndB[0] - runwayEndA[0]) * pp;
+      planeZ = runwayEndA[1] + (runwayEndB[1] - runwayEndA[1]) * pp;
+      planeAng = airport.ang;  // 沿跑道方向
+      drawScale = 1.0;
+    } else if (p < P3) {
+      // 爬升：从跑道 B 端 → 巡航圆起点(cruiseEndX, cruiseEndZ)
+      const pp = (p - P2) / T_CLIMB;
+      const fromX = runwayEndB[0], fromZ = runwayEndB[1];
+      const toX = cruiseEndX, toZ = cruiseEndZ;
+      planeX = fromX + (toX - fromX) * pp;
+      planeZ = fromZ + (toZ - fromZ) * pp;
+      const dx = toX - fromX, dz = toZ - fromZ;
+      // drawPlane 中 rotate(-ang) 后机身沿 z 轴，机头指向 -z
+      // 飞机向 (dx, dz) 方向飞 → ang = atan2(dx, dz)
+      planeAng = Math.atan2(dx, dz);
+      drawScale = 1.0 + 0.5 * pp;  // 1.0 → 1.5（升高感）
+    } else if (p < P4) {
+      // 巡航：顺时针绕目标区（0 → 2π）
+      const pp = (p - P3) / T_CRUISE;
+      const circleAng = pp * Math.PI * 2;  // 0 → 2π
+      planeX = targetX + Math.cos(circleAng) * CRUISE_R;
+      planeZ = targetZ + Math.sin(circleAng) * CRUISE_R;
+      // 顺时针切线方向 = (-sin, cos) → ang = atan2(-sinA, cosA)
+      // 但 drawPlane rotate(-ang) 机头 -z：ang = atan2(-sinA, cosA) 使机头朝切线
+      // 实际：飞机在 (cos(a), sin(a)) 处顺时针，切线 = (-sin(a), cos(a))
+      // 要让飞机面向 (-sinA, cosA)：ang = atan2(-sinA, cosA)
+      planeAng = Math.atan2(-Math.sin(circleAng), Math.cos(circleAng));
+      drawScale = 1.5;
+    } else if (p < P5) {
+      // 返航：从巡航圆终点 → 跑道 B 端
+      const pp = (p - P4) / T_RETURN;
+      const fromX = cruiseEndX, fromZ = cruiseEndZ;
+      const toX = runwayEndB[0], toZ = runwayEndB[1];
+      planeX = fromX + (toX - fromX) * pp;
+      planeZ = fromZ + (toZ - fromZ) * pp;
+      const dx = toX - fromX, dz = toZ - fromZ;
+      planeAng = Math.atan2(dx, dz);
+      drawScale = 1.5 - 0.5 * pp;  // 1.5 → 1.0
     } else {
-      // 返航阶段：飞回机场
-      const returnP = (p - 0.9) / 0.1;
-      const prevCircleAng = Math.PI * 2;
-      const radius = 15;
-      const fromX = targetX + Math.cos(prevCircleAng) * radius;
-      const fromZ = targetZ + Math.sin(prevCircleAng) * radius;
-      planeX = fromX + (airport.x - fromX) * returnP;
-      planeZ = fromZ + (airport.z - fromZ) * returnP;
-      const toX = airport.x - fromX;
-      const toZ = airport.z - fromZ;
-      planeAng = Math.atan2(toX, toZ);
+      // 降落滑跑 B→A（注意：降落从 B 到 A，朝向与起飞相反）
+      const pp = (p - P5) / (1 - P5);
+      planeX = runwayEndB[0] + (runwayEndA[0] - runwayEndB[0]) * pp;
+      planeZ = runwayEndB[1] + (runwayEndA[1] - runwayEndB[1]) * pp;
+      // 从 B 飞向 A，方向 = A - B
+      const dx = runwayEndA[0] - runwayEndB[0];
+      const dz = runwayEndA[1] - runwayEndB[1];
+      planeAng = Math.atan2(dx, dz);
+      drawScale = 1.0;
     }
 
+    // 带缩放绘制飞机（scale 模拟高度感）
+    ctx.save();
+    if (drawScale !== 1.0) {
+      ctx.translate(planeX, planeZ);
+      ctx.scale(drawScale, drawScale);
+      ctx.translate(-planeX, -planeZ);
+    }
     drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
+    ctx.restore();
   }
 
   /* ----------------------------------------------------------
