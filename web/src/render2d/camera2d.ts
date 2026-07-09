@@ -128,7 +128,9 @@ export function createCamera2D(
     const anchorSy = e.offsetY;
     const [wx, wz] = screenToWorld(anchorSx, anchorSy);
 
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    // 缩放量与 deltaY 幅度成比例：触控板的连续小增量得到平滑缩放，
+    // 传统滚轮一格（deltaY≈±100）约 ±12%
+    const factor = Math.exp(-e.deltaY * 0.0012);
     zoom = clamp(zoom * factor, zoomMin, zoomMax);
 
     // 调整 center 使锚点不动
