@@ -20,6 +20,8 @@ import { createGardenPanel } from '../ui/gardenpanel';
 import { groupTasks, totalConstruction } from '../util/tasks';
 import { obsidianUri } from '../ui/obsidian';
 import { LENSES, lensById, gardenSetOf, lensHitBuildings, type LensId } from '../render2d/lenses';
+import { pickWeightedIndex, staleWeight } from '../util/random';
+import { exportPoster, downloadBlob, posterFilename } from '../ui/poster';
 import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
@@ -65,6 +67,10 @@ export interface CityViewHandle {
   openGardenPanel(): void;
   /** 沿链接漫游到目标建筑（飞行 + 高亮 + 卡片刷新） */
   navigateLink(notePath: string): void;
+  /** 随机漫步到一栋（偏老）建筑；返回其 notePath（无建筑返回 null） */
+  randomWalk(): string | null;
+  /** 导出城市海报 PNG，返回 blob 字节数（失败返回 0） */
+  exportPoster(): Promise<number>;
 }
 
 export function showCity2D(
@@ -357,6 +363,57 @@ export function showCity2D(
     lensBtns.set(def.id, btn);
   }
 
+  // ---- 12e. 随机漫步（F7）----
+  const nonCivic = [...buildingIndex.values()].filter((x) => !x.b.isCivic);
+  const recentWalk: string[] = [];
+  function randomWalk(): string | null {
+    if (nonCivic.length === 0) return null;
+    // 权重：越久未修改越可能被选中。now/随机为用户主动触发的交互，豁免确定性铁律。
+    const now = Date.now();
+    const pool = nonCivic.filter((x) => !recentWalk.includes(x.b.notePath));
+    const candidates = pool.length > 0 ? pool : nonCivic;
+    const weights = candidates.map((x) => staleWeight(x.b.mtimeMs, now));
+    const idx = pickWeightedIndex(weights, Math.random());
+    if (idx < 0) return null;
+    const chosen = candidates[idx];
+    recentWalk.push(chosen.b.notePath);
+    if (recentWalk.length > 5) recentWalk.shift();
+    locate(chosen.b.notePath);
+    return chosen.b.notePath;
+  }
+  hud.addButton('🎲 漫游', () => randomWalk());
+
+  // ---- 12f. 海报导出（F8）----
+  let posterBtn: HTMLButtonElement;
+  async function doExportPoster(): Promise<number> {
+    const label = posterBtn.textContent;
+    posterBtn.textContent = '⏳ 渲染中…';
+    posterBtn.disabled = true;
+    try {
+      // date 为用户主动触发时刻，豁免确定性铁律
+      const date = new Date().toISOString().slice(0, 10);
+      const blob = await exportPoster(painter, expandedBounds, {
+        name: vault.name,
+        tier: city.tier,
+        noteCount: city.noteCount,
+        activeCount7d: city.activeCount7d,
+        date,
+      });
+      if (!blob) {
+        hud.setTip('导出失败：图像过大');
+        return 0;
+      }
+      downloadBlob(blob, posterFilename(vault.name, date));
+      return blob.size;
+    } finally {
+      posterBtn.textContent = label;
+      posterBtn.disabled = false;
+    }
+  }
+  posterBtn = hud.addButton('🖼 海报', () => {
+    void doExportPoster();
+  });
+
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];
   let lastFrameT = 0;
@@ -599,6 +656,12 @@ export function showCity2D(
     },
     navigateLink(notePath: string): void {
       navigateLink(notePath);
+    },
+    randomWalk(): string | null {
+      return randomWalk();
+    },
+    exportPoster(): Promise<number> {
+      return doExportPoster();
     },
 
     pois: painter.pois,
