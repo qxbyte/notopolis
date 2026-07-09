@@ -64,7 +64,9 @@ describe('layoutDistricts', () => {
     }
   });
 
-  it('散布性：≥3 区时，中心两两最大距离 > 1.4 × 最大团块直径', () => {
+  // 2026-07-09 用户要求区域放大、间隔收紧（TARGET_GAP=8）：散布度阈值从 1.4× 降为 1.05×，
+  // 语义改为「不是同心堆叠」；紧凑但不重叠由「团块不重叠」用例保证。
+  it('散布性：≥3 区时，中心两两最大距离 > 1.05 × 最大团块直径', () => {
     const plots = layoutDistricts(counts);
 
     // 最大团块直径（取第一个，count 最大）
@@ -87,7 +89,7 @@ describe('layoutDistricts', () => {
       }
     }
 
-    expect(maxDist).toBeGreaterThan(1.4 * largestDiameter);
+    expect(maxDist).toBeGreaterThan(1.05 * largestDiameter);
   });
 
   it('面积正相关：polygon 面积（shoelace）单调递减随 count', () => {
