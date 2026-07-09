@@ -1,14 +1,14 @@
 import './ui/style.css';
 import { fetchWorld, fetchCity, connectWS } from './api';
 import type { WorldVault } from './api';
-import { createScene } from './scene/setup';
 import { showOnboarding } from './ui/onboarding';
-import { showWorldMap } from './views/worldmap';
-import { showCity } from './views/cityview';
-import type { CityViewHandle } from './views/cityview';
+import { showWorldMap2D } from './views/worldmap2d';
+import { showCity2D } from './views/cityview2d';
+import type { CityViewHandle } from './views/cityview2d';
 
-const container = document.getElementById('app') as HTMLElement;
-const { scene, renderer } = createScene(container);
+const container = document.createElement('div');
+container.style.cssText = 'position:fixed;inset:0;overflow:hidden;';
+document.body.appendChild(container);
 
 let current: { dispose(): void } | null = null;
 let currentVaultId: string | null = null;
@@ -48,7 +48,7 @@ async function goWorldMap(): Promise<void> {
   try {
     clearCurrent();
     const { vaults } = await fetchWorld();
-    current = showWorldMap({ scene, renderer, container }, vaults, goCity);
+    current = showWorldMap2D(container, vaults, goCity);
     __notopolis.view = 'worldmap';
     __notopolis.pickables = 0;
     __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
@@ -64,7 +64,7 @@ async function goCity(vault: WorldVault): Promise<void> {
     clearCurrent();
     currentVaultId = vault.id;
     const city = await fetchCity(vault.id);
-    const cityHandle: CityViewHandle = showCity({ scene, renderer, container }, vault, city, goWorldMap);
+    const cityHandle: CityViewHandle = showCity2D(container, vault, city, goWorldMap);
     current = cityHandle;
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
