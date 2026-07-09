@@ -2276,37 +2276,54 @@ function paintWilderness(
   const forestDensity = isMountain ? 1.5 : 1.0;
   const forestBlobColor = isMountain ? '#c0d8a0' : '#d4ecb0';
 
+  // 先计算每片的 blobR，找最大片升级为「深林」
+  const forestBlobRs: number[] = [];
+  for (let fi = 0; fi < forestPatchCount; fi++) {
+    forestBlobRs.push(8 + rng() * 6);
+  }
+  const deepForestIdx = forestBlobRs.indexOf(Math.max(...forestBlobRs.length ? forestBlobRs : [0]));
+
   for (let fi = 0; fi < forestPatchCount; fi++) {
     const candidateIdx = (meadowCount + fi) % candidates.length;
     const [cx, cz] = candidates[candidateIdx];
+    const blobR = forestBlobRs[fi];
+    const isDeep = fi === deepForestIdx && forestPatchCount > 0;
 
     // 底斑
-    const blobR = 8 + rng() * 6;
     (ctx as unknown as Record<string, unknown>).fillStyle = forestBlobColor;
     (ctx as unknown as Record<string, unknown>).globalAlpha = 0.25;
     scribbleBlob(ctx, rng, cx, cz, blobR);
     ctx.fill();
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
-    // 8-20 棵树
-    const treeCount = Math.round((8 + Math.floor(rng() * 13)) * forestDensity);
+    // 深林：外缘额外绿斑
+    if (isDeep) {
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#b8d4a0';
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.15;
+      scribbleBlob(ctx, rng, cx, cz, blobR * 1.3);
+      ctx.fill();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+    }
+
+    // 树数量：深林 20-40，普通 8-20
+    const baseCount = isDeep ? 20 + Math.floor(rng() * 21) : 8 + Math.floor(rng() * 13);
+    const treeCount = Math.round(baseCount * forestDensity);
+
     for (let ti = 0; ti < treeCount; ti++) {
       const tx = cx + (rng() - 0.5) * blobR * 1.5;
       const tz = cz + (rng() - 0.5) * blobR * 1.5;
       const tr = 1.2 + rng() * 1.0;
 
       if (isSnow) {
-        // snow：三角松
+        // snow：三角松（与原有实现一致）
         const h = tr * 2.2;
         const trunkH = h * 0.4;
-        // 树干
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
         (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
         ctx.beginPath();
         ctx.moveTo(tx, tz + trunkH * 0.5);
         ctx.lineTo(tx, tz + trunkH);
         ctx.stroke();
-        // 3 层三角形叶冠
         for (let li = 0; li < 3; li++) {
           const ly = tz - h * 0.7 + li * (h * 0.3);
           const lw = h * 0.2 + li * h * 0.15;
@@ -2318,7 +2335,6 @@ function paintWilderness(
           ctx.lineTo(tx + lw, ly + h * 0.25);
           ctx.closePath();
           ctx.fill();
-          // 雪帽
           (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
           (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
           ctx.beginPath();
@@ -2336,7 +2352,6 @@ function paintWilderness(
         scribbleBlob(ctx, rng, tx, tz, tr);
         ctx.fill();
         (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-        // 树干
         (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
         (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
         ctx.beginPath();
@@ -2344,6 +2359,23 @@ function paintWilderness(
         ctx.lineTo(tx, tz + 1.5 + rng() * 0.8);
         ctx.stroke();
       }
+    }
+
+    // 深林：内部林间小径（虚线，4-6 个折点）
+    if (isDeep) {
+      const trailSegCount = 4 + Math.floor(rng() * 3);
+      const trailPts: [number, number][] = [];
+      for (let tsi = 0; tsi < trailSegCount; tsi++) {
+        trailPts.push([
+          cx + (rng() - 0.5) * blobR * 1.2,
+          cz - blobR * 0.6 + tsi * (blobR * 1.2 / trailSegCount) + (rng() - 0.5) * 2,
+        ]);
+      }
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+      dashedPath(ctx, trailPts, [2, 3]);
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
     }
   }
 

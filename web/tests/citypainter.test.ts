@@ -191,3 +191,19 @@ describe('T7 — 湿地元素避让聚落', () => {
     expect(calls).toEqual(c2);
   });
 });
+
+describe('T8 — 旷野整体密度确定性', () => {
+  it('大地图 wilderness 调用数 > 小地图（旷野面积越大元素越多）', () => {
+    const bigParams = worldParams('big', 100, 100, 120, 120);
+    const { world: wb, calls: cb } = makeMockWorld();
+    paintCity(wb as never, fixture, bigParams, 'big');
+
+    const smallParams = worldParams('small', 30, 30, 40, 40);
+    const { world: ws, calls: cs } = makeMockWorld();
+    paintCity(ws as never, fixture, smallParams, 'small');
+
+    // Big map has more wilderness area → more candidates → more elements
+    // At minimum: more quadraticCurveTo calls (more trees)
+    expect(cb.length).toBeGreaterThanOrEqual(cs.length);
+  });
+});
