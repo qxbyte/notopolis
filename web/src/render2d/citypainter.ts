@@ -391,7 +391,7 @@ function paintSea(
   // 沙滩带（岸内侧 3 世界单位 sand 色条）
   const sandColor = '#e8d8a0';
   (ctx as unknown as Record<string, unknown>).strokeStyle = sandColor;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 3;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
   (ctx as unknown as Record<string, unknown>).globalAlpha = 0.35;
   wobblyPath(ctx, rng, coastPts, 0.5);
   ctx.stroke();
@@ -423,8 +423,7 @@ function paintSea(
   for (let i = 0; i < 8; i++) {
     const idx = Math.floor(rng() * coastPts.length);
     const [fx, fz] = coastPts[idx];
-    ctx.beginPath();
-    ctx.arc(fx + cosSide * (5 + rng() * 10), fz + sinSide * (5 + rng() * 10), 0.3 + rng() * 0.4, 0, Math.PI * 2);
+    wobblyCircle(ctx, rng, fx + cosSide * (5 + rng() * 10), fz + sinSide * (5 + rng() * 10), 0.3 + rng() * 0.4, 0.1);
     ctx.fill();
   }
   (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
