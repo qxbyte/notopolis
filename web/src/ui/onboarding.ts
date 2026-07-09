@@ -1,19 +1,35 @@
 /**
  * ui/onboarding.ts
- * 首次启动引导界面——添加 Obsidian 仓库，建立城邦。
+ * 仓库管理首页——添加、查看、删除 Obsidian 仓库；进入世界地图。
  */
 
 import { fetchWorld, addVault, removeVault } from '../api';
 import type { WorldVault } from '../api';
 
-export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
+const THEME_LABELS: Record<string, string> = {
+  plains: '平原王城',
+  mountain: '山地雄关',
+  harbor: '海港商邦',
+  snow: '雪原孤城',
+};
+
+export interface HomeOptions {
+  onEnter: () => void;
+  onDelete?: (id: string) => void;
+  onAdd?: () => void;
+}
+
+export function showHome(parent: HTMLElement, options: HomeOptions | (() => void)): void {
+  // 兼容旧调用方式：showHome(parent, onDone)
+  const onEnter = typeof options === 'function' ? options : options.onEnter;
+
   const overlay = document.createElement('div');
   overlay.id = 'onboarding';
 
   overlay.innerHTML = `
     <div class="ob-box">
-      <h1>欢迎，执政官</h1>
-      <p class="subtitle">添加你的 Obsidian 仓库，每一座仓库将成为一座城邦</p>
+      <h1>NOTOPOLIS</h1>
+      <p class="subtitle">仓库管理 · 每一座 Obsidian 仓库都是一座城邦</p>
       <ul class="vault-list" id="vault-list"></ul>
       <div class="add-form">
         <input id="ob-path" type="text" placeholder="仓库绝对路径，例如 /Users/you/Notes" />
@@ -27,7 +43,7 @@ export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
         <button class="add-btn" id="ob-add-btn">＋ 添加仓库</button>
       </div>
       <div class="ob-error" id="ob-error"></div>
-      <button class="found-btn" id="ob-found-btn" disabled>⚑ 奠基建城</button>
+      <button class="found-btn" id="ob-found-btn" disabled>⚑ 进入世界</button>
     </div>
   `;
 
@@ -46,10 +62,23 @@ export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
     for (const vault of vaults) {
       const li = document.createElement('li');
       li.className = 'vault-item';
+
+      // 状态徽标
+      let badge: string;
+      if (vault.ok) {
+        const tierLabel = TIER_LABELS[vault.tier] ?? vault.tier;
+        badge = `<span class="vault-badge vault-badge--ok">✓ ${vault.noteCount} 篇 · ${escHtml(tierLabel)}</span>`;
+      } else {
+        badge = `<span class="vault-badge vault-badge--warn">⚠ 无法读取</span>`;
+      }
+
+      const themeLabel = THEME_LABELS[vault.theme] ?? vault.theme;
+
       li.innerHTML = `
         <span class="vault-name">${escHtml(vault.name)}</span>
         <span class="vault-path">${escHtml(vault.path)}</span>
-        <span class="vault-theme">${escHtml(vault.theme)}</span>
+        <span class="vault-theme">${escHtml(themeLabel)}</span>
+        ${badge}
         <button class="del-btn" data-id="${escHtml(vault.id)}">✕</button>
       `;
       vaultList.appendChild(li);
@@ -101,12 +130,24 @@ export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
     }
   });
 
-  // Found city
+  // Enter world
   foundBtn.addEventListener('click', () => {
     overlay.remove();
-    onDone();
+    onEnter();
   });
 }
+
+// 向后兼容别名
+export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
+  showHome(parent, onDone);
+}
+
+const TIER_LABELS: Record<string, string> = {
+  camp: '拓荒营地',
+  village: '聚落村庄',
+  city: '繁华城市',
+  capital: '帝都首府',
+};
 
 function escHtml(s: string): string {
   return s

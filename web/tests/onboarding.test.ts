@@ -8,19 +8,20 @@ vi.mock('../src/api', () => ({
   removeVault: vi.fn(),
 }));
 
-import { showOnboarding } from '../src/ui/onboarding';
+import { showHome, showOnboarding } from '../src/ui/onboarding';
 import { fetchWorld, addVault, removeVault } from '../src/api';
 
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 
-const makeVault = (id: string, name: string): WorldVault => ({
+const makeVault = (id: string, name: string, ok = true): WorldVault => ({
   id,
   name,
   path: `/vaults/${id}`,
   theme: 'plains',
   noteCount: 10,
   tier: 'village',
-  ok: true,
+  ok,
+  reason: ok ? undefined : '路径不存在',
 });
 
 afterEach(() => {
@@ -28,7 +29,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('onboarding', () => {
+describe('showHome (仓库管理首页)', () => {
   let parent: HTMLElement;
 
   beforeEach(() => {
@@ -40,22 +41,56 @@ describe('onboarding', () => {
     parent.remove();
   });
 
+  it('renders NOTOPOLIS title and subtitle', async () => {
+    vi.mocked(fetchWorld).mockResolvedValue({ vaults: [] });
+    showHome(parent, { onEnter: vi.fn() });
+    await flush();
+    const overlay = document.getElementById('onboarding')!;
+    expect(overlay.textContent).toContain('NOTOPOLIS');
+    expect(overlay.textContent).toContain('仓库管理');
+  });
+
   it('renders vault list from fetchWorld', async () => {
     vi.mocked(fetchWorld).mockResolvedValue({
       vaults: [makeVault('a', 'Vault A'), makeVault('b', 'Vault B')],
     });
-    showOnboarding(parent, vi.fn());
+    showHome(parent, { onEnter: vi.fn() });
     await flush();
     const overlay = document.getElementById('onboarding')!;
     expect(overlay.textContent).toContain('Vault A');
     expect(overlay.textContent).toContain('Vault B');
   });
 
+  it('shows ok badge with noteCount and tier label when vault.ok=true', async () => {
+    vi.mocked(fetchWorld).mockResolvedValue({
+      vaults: [makeVault('a', 'Vault A', true)],
+    });
+    showHome(parent, { onEnter: vi.fn() });
+    await flush();
+    const overlay = document.getElementById('onboarding')!;
+    // 状态徽标包含篇数和 tier 中文名
+    expect(overlay.textContent).toContain('10 篇');
+    expect(overlay.textContent).toContain('聚落村庄');
+    const badge = overlay.querySelector('.vault-badge--ok');
+    expect(badge).not.toBeNull();
+  });
+
+  it('shows warn badge when vault.ok=false', async () => {
+    const badVault = makeVault('c', 'Bad Vault', false);
+    vi.mocked(fetchWorld).mockResolvedValue({ vaults: [badVault] });
+    showHome(parent, { onEnter: vi.fn() });
+    await flush();
+    const overlay = document.getElementById('onboarding')!;
+    expect(overlay.textContent).toContain('⚠ 无法读取');
+    const badge = overlay.querySelector('.vault-badge--warn');
+    expect(badge).not.toBeNull();
+  });
+
   it('addVault called with correct args', async () => {
     vi.mocked(fetchWorld).mockResolvedValue({ vaults: [] });
     vi.mocked(addVault).mockResolvedValue(makeVault('new', 'Test') as ReturnType<typeof addVault> extends Promise<infer T> ? T : never);
 
-    showOnboarding(parent, vi.fn());
+    showHome(parent, { onEnter: vi.fn() });
     await flush();
 
     const overlay = document.getElementById('onboarding')!;
@@ -77,23 +112,41 @@ describe('onboarding', () => {
     expect(addVault).toHaveBeenCalledWith('Test', '/some/path', 'mountain');
   });
 
-  it('found button disabled when no vaults', async () => {
+  it('enter button disabled when no vaults', async () => {
     vi.mocked(fetchWorld).mockResolvedValue({ vaults: [] });
-    showOnboarding(parent, vi.fn());
+    showHome(parent, { onEnter: vi.fn() });
     await flush();
     const foundBtn = document.getElementById('onboarding')!.querySelector<HTMLButtonElement>('#ob-found-btn')!;
     expect(foundBtn.disabled).toBe(true);
   });
 
-  it('found button enabled after vault exists', async () => {
+  it('enter button enabled after vault exists', async () => {
     vi.mocked(fetchWorld).mockResolvedValue({ vaults: [makeVault('a', 'A')] });
-    showOnboarding(parent, vi.fn());
+    showHome(parent, { onEnter: vi.fn() });
     await flush();
     const foundBtn = document.getElementById('onboarding')!.querySelector<HTMLButtonElement>('#ob-found-btn')!;
     expect(foundBtn.disabled).toBe(false);
   });
 
-  it('onDone called on found button click', async () => {
+  it('enter button shows ⚑ 进入世界', async () => {
+    vi.mocked(fetchWorld).mockResolvedValue({ vaults: [] });
+    showHome(parent, { onEnter: vi.fn() });
+    await flush();
+    const foundBtn = document.getElementById('onboarding')!.querySelector<HTMLButtonElement>('#ob-found-btn')!;
+    expect(foundBtn.textContent).toContain('进入世界');
+  });
+
+  it('onEnter called on enter button click', async () => {
+    vi.mocked(fetchWorld).mockResolvedValue({ vaults: [makeVault('a', 'A')] });
+    const onEnter = vi.fn();
+    showHome(parent, { onEnter });
+    await flush();
+    const foundBtn = document.getElementById('onboarding')!.querySelector<HTMLButtonElement>('#ob-found-btn')!;
+    foundBtn.click();
+    expect(onEnter).toHaveBeenCalledOnce();
+  });
+
+  it('backward-compat: showOnboarding(parent, onDone) still works', async () => {
     vi.mocked(fetchWorld).mockResolvedValue({ vaults: [makeVault('a', 'A')] });
     const onDone = vi.fn();
     showOnboarding(parent, onDone);

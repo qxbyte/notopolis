@@ -31,6 +31,9 @@
 .vault-theme { flex: 0 0 auto; font-size: 11px; color: #9a8; }
 .del-btn { margin-left: auto; flex: 0 0 auto; background: none; border: none; color: #c06060; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
 .del-btn:hover { background: rgba(200,80,80,0.15); }
+.vault-badge { flex: 0 0 auto; font-size: 11px; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.vault-badge--ok { color: #6dcf7a; background: rgba(80,180,90,0.12); }
+.vault-badge--warn { color: #e0c040; background: rgba(200,170,40,0.12); }
 .add-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .add-form input, .add-form select { background: #1e1a2e; border: 1px solid #4a4264; color: #e8e0d4; border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; }
 .add-form input:focus, .add-form select:focus { border-color: #d9c58a; }

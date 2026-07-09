@@ -15,14 +15,19 @@ test.beforeAll(() => {
   fs.mkdirSync(artifactsDir, { recursive: true });
 });
 
-test('onboarding → worldmap → city smoke test', async ({ page }) => {
+test('home → add vault → enter world → city smoke test', async ({ page }) => {
   const vaultPath = path.join(process.cwd(), 'tests/fixtures/vault-a');
 
-  // ---- 首启流程（onboarding）----
+  // ---- 首页（仓库管理页）----
   await page.goto('/');
 
-  // 等待「欢迎，执政官」文本
-  await expect(page.getByText('欢迎，执政官')).toBeVisible({ timeout: 15000 });
+  // 等待首页标题「NOTOPOLIS」
+  await expect(page.getByText('NOTOPOLIS')).toBeVisible({ timeout: 15000 });
+
+  // 断言「进入世界」按钮存在（初始无 vault，应禁用）
+  const foundBtn = page.locator('#ob-found-btn');
+  await expect(foundBtn).toBeVisible({ timeout: 5000 });
+  await expect(foundBtn).toBeDisabled();
 
   // 填写 vault 路径
   await page.fill('#ob-path', vaultPath);
@@ -39,7 +44,10 @@ test('onboarding → worldmap → city smoke test', async ({ page }) => {
   // 等待列表出现「测试城」
   await expect(page.getByText('测试城')).toBeVisible({ timeout: 10000 });
 
-  // 点击「奠基建城」按钮
+  // 「进入世界」按钮应变为可用
+  await expect(foundBtn).toBeEnabled({ timeout: 5000 });
+
+  // 点击「进入世界」按钮
   await page.click('#ob-found-btn');
 
   // 等待 __notopolis.view === 'worldmap'

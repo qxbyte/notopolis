@@ -1,10 +1,13 @@
 import './ui/style.css';
 import { fetchWorld, fetchCity, connectWS } from './api';
 import type { WorldVault } from './api';
-import { showOnboarding } from './ui/onboarding';
+import { showHome, showOnboarding } from './ui/onboarding';
 import { showWorldMap2D } from './views/worldmap2d';
 import { showCity2D } from './views/cityview2d';
 import type { CityViewHandle } from './views/cityview2d';
+
+// 保留 showOnboarding 引用避免 tree-shake 删掉（向后兼容）
+void showOnboarding;
 
 const container = document.createElement('div');
 container.style.cssText = 'position:fixed;inset:0;overflow:hidden;';
@@ -42,13 +45,21 @@ async function enterCity(vaultId: string): Promise<void> {
   if (vault) await goCity(vault);
 }
 
+function goHome(): void {
+  clearCurrent();
+  __notopolis.view = 'onboarding';
+  showHome(container, {
+    onEnter: goWorldMap,
+  });
+}
+
 async function goWorldMap(): Promise<void> {
   if (navigating) return;
   navigating = true;
   try {
     clearCurrent();
     const { vaults } = await fetchWorld();
-    current = showWorldMap2D(container, vaults, goCity);
+    current = showWorldMap2D(container, vaults, goCity, goHome);
     __notopolis.view = 'worldmap';
     __notopolis.pickables = 0;
     __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
@@ -76,13 +87,8 @@ async function goCity(vault: WorldVault): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  const { vaults } = await fetchWorld();
-  if (vaults.length === 0) {
-    __notopolis.view = 'onboarding';
-    showOnboarding(container, goWorldMap);
-  } else {
-    await goWorldMap();
-  }
+  // 首页固定为仓库管理页，不再判断 vaults.length
+  goHome();
 }
 
 document.addEventListener('keydown', (e) => {

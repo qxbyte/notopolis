@@ -216,6 +216,7 @@ export function showWorldMap2D(
   container: HTMLElement,
   vaults: WorldVault[],
   onEnterCity: (vault: WorldVault) => void,
+  onManage?: () => void,
 ): WorldMap2DHandle {
   const bounds = { minX: -200, minZ: -200, maxX: 200, maxZ: 200 };
 
@@ -228,6 +229,18 @@ export function showWorldMap2D(
   container.appendChild(canvas);
 
   const ctx = canvas.getContext('2d')!;
+
+  // ---- 仓库管理按钮 ----
+  let manageBtn: HTMLButtonElement | null = null;
+  const onManageBtnClick = () => onManage?.();
+  if (onManage) {
+    manageBtn = document.createElement('button');
+    manageBtn.id = 'manage-btn';
+    manageBtn.textContent = '⚙ 仓库管理';
+    manageBtn.style.cssText = 'position:absolute;top:12px;right:14px;z-index:10;background:rgba(30,26,46,0.85);border:1px solid #4a4264;color:#d9c58a;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;';
+    manageBtn.addEventListener('click', onManageBtnClick);
+    container.appendChild(manageBtn);
+  }
 
   // ---- 相机 ----
   const camera = createCamera2D(canvas, bounds);
@@ -398,6 +411,11 @@ export function showWorldMap2D(
       tooltip.remove();
       errTip.remove();
       if (errTipTimer) clearTimeout(errTipTimer);
+      if (manageBtn) {
+        manageBtn.removeEventListener('click', onManageBtnClick);
+        manageBtn.remove();
+        manageBtn = null;
+      }
     },
   };
 }
