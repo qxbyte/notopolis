@@ -33,8 +33,13 @@ export interface StationPos {
 export interface Airport {
   x: number;
   z: number;
-  ang: number;                      // 跑道朝向（弧度）
-  len: number;                      // 跑道长度（固定 26）
+  ang: number;        // 跑道朝向（弧度）
+  len: number;        // 跑道长度（36）
+  width: number;      // 跑道宽度（7）
+  apron: { dx: number; dz: number };   // 停机坪中心（相对机场原点的偏移，在局部坐标系下）
+  tower: { dx: number; dz: number };   // 塔台位置（局部坐标）
+  hangar: { dx: number; dz: number };  // 机库位置（局部坐标）
+  accessRoad: [number, number][];       // 跑道端到最近聚落中心的折线（世界坐标）
 }
 
 export interface FerryRoute {
@@ -338,7 +343,51 @@ function buildAirport(
     if (tooClosePoly) continue;
 
     const ang = rng() * Math.PI;
-    return { x, z, ang, len: 26 };
+
+    // 局部坐标下的位置（相对 airport 中心 (x,z)，局部坐标系：沿跑道为 X，垂直为 Z）
+    const halfLen = 18;   // len/2 = 36/2
+    const apronDx = halfLen * 0.3;   // 停机坪在跑道中段靠近一侧
+    const apronDz = -10;              // 停机坪在跑道侧方（负 Z = 跑道法向一侧）
+    const towerDx = halfLen;          // 塔台在跑道末端
+    const towerDz = -8;
+    const hangarDx = -halfLen * 0.4;  // 机库在跑道中段另一端
+    const hangarDz = -8;
+
+    // accessRoad：从跑道末端（世界坐标）到最近聚落中心，折线 2-3 点
+    // 跑道末端世界坐标
+    const cosAng = Math.cos(ang), sinAng = Math.sin(ang);
+    const runwayEndX = x + cosAng * halfLen;
+    const runwayEndZ = z + sinAng * halfLen;
+
+    // 找最近聚落中心
+    let nearestCx = runwayEndX, nearestCz = runwayEndZ;
+    let nearestDist = Infinity;
+    for (const d of city.districts) {
+      const dcx = d.x + d.width / 2;
+      const dcz = d.z + d.depth / 2;
+      const dd = Math.hypot(dcx - x, dcz - z);
+      if (dd < nearestDist) {
+        nearestDist = dd;
+        nearestCx = dcx;
+        nearestCz = dcz;
+      }
+    }
+    // 折线：跑道末端 → 中间折点（偏向聚落方向）→ 聚落中心
+    const midX = (runwayEndX + nearestCx) / 2 + (rng() - 0.5) * 20;
+    const midZ = (runwayEndZ + nearestCz) / 2 + (rng() - 0.5) * 20;
+    const accessRoad: [number, number][] = [
+      [runwayEndX, runwayEndZ],
+      [midX, midZ],
+      [nearestCx, nearestCz],
+    ];
+
+    return {
+      x, z, ang, len: 36, width: 7,
+      apron: { dx: apronDx, dz: apronDz },
+      tower: { dx: towerDx, dz: towerDz },
+      hangar: { dx: hangarDx, dz: hangarDz },
+      accessRoad,
+    };
   }
 
   return null;

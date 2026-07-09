@@ -233,7 +233,10 @@ describe('T6 airport distance constraint', () => {
       // Must be far from district center (0,0)
       const d = Math.hypot(net.airport.x, net.airport.z);
       expect(d).toBeGreaterThan(15);
-      expect(net.airport.len).toBe(26);
+      expect(net.airport.len).toBe(36);
+      expect(net.airport.width).toBe(7);
+      expect(net.airport.accessRoad).toBeDefined();
+      expect(net.airport.accessRoad.length).toBeGreaterThanOrEqual(2);
     }
   });
 });

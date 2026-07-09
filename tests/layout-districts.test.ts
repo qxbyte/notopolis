@@ -64,7 +64,7 @@ describe('layoutDistricts', () => {
     }
   });
 
-  it('散布性：≥3 区时，中心两两最大距离 > 2.5 × 最大团块直径', () => {
+  it('散布性：≥3 区时，中心两两最大距离 > 1.4 × 最大团块直径', () => {
     const plots = layoutDistricts(counts);
 
     // 最大团块直径（取第一个，count 最大）
@@ -87,7 +87,7 @@ describe('layoutDistricts', () => {
       }
     }
 
-    expect(maxDist).toBeGreaterThan(2.5 * largestDiameter);
+    expect(maxDist).toBeGreaterThan(1.4 * largestDiameter);
   });
 
   it('面积正相关：polygon 面积（shoelace）单调递减随 count', () => {

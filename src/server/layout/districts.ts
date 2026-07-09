@@ -12,6 +12,7 @@ export interface Plot {
 const UNIT_AREA = 64; // 每篇笔记占据的世界面积（4x4 建筑格 × 4 格余量）
 const R_SCALE = 1.2; // 团块半径系数（确保楼位格子够用）
 const MIN_GAP = 12; // 旷野最小间隙
+const TARGET_GAP = 22; // 目标间隙（候选选取策略）
 const MAX_CANDIDATES = 80; // 每次散布候选点数
 const POLY_VERTS = 18; // 有机多边形顶点数
 
@@ -99,7 +100,7 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
   const maxR = Math.max(...radii);
 
   // 世界散布半径
-  const SPREAD_R = Math.max(Math.sqrt(total * UNIT_AREA) * 1.5, maxR * 4);
+  const SPREAD_R = Math.max(Math.sqrt(total * UNIT_AREA) * 0.95, maxR * 2.2);
 
   // 已放置中心点集合
   const placed: Array<{ cx: number; cz: number; R: number }> = [];
@@ -126,10 +127,15 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
       cx = r0 * Math.cos(a0);
       cz = r0 * Math.sin(a0);
     } else {
-      // 生成候选点，选间隙最大的
+      // 生成候选点，使用目标间隙策略
       let bestCx = 0;
       let bestCz = 0;
       let bestGap = -Infinity;
+
+      // 目标间隙候选（gap ≥ MIN_GAP，选 |gap - TARGET_GAP| 最小者）
+      let bestTargetCx = 0;
+      let bestTargetCz = 0;
+      let bestTargetDist = Infinity;
 
       for (let c = 0; c < MAX_CANDIDATES; c++) {
         // 均匀撒在半径 SPREAD_R 圆内（拒绝采样 → 均匀分布）
@@ -151,18 +157,32 @@ export function layoutDistricts(counts: { dir: string; count: number }[]): Plot[
           if (gap < minGap) minGap = gap;
         }
 
+        // 兜底：记录 gap 最大的候选
         if (minGap > bestGap) {
           bestGap = minGap;
           bestCx = candX;
           bestCz = candZ;
         }
 
-        // 若满足最小间隙且 gap 已足够大，提前退出
-        if (minGap >= MIN_GAP && minGap > bestGap - 0.01) break;
+        // 目标间隙策略：gap ≥ MIN_GAP 时，选 |gap - TARGET_GAP| 最小者
+        if (minGap >= MIN_GAP) {
+          const targetDist = Math.abs(minGap - TARGET_GAP);
+          if (targetDist < bestTargetDist) {
+            bestTargetDist = targetDist;
+            bestTargetCx = candX;
+            bestTargetCz = candZ;
+          }
+        }
       }
 
-      cx = bestCx;
-      cz = bestCz;
+      // 优先使用目标间隙候选，若无满足 MIN_GAP 的候选则退回最大 gap
+      if (bestTargetDist < Infinity) {
+        cx = bestTargetCx;
+        cz = bestTargetCz;
+      } else {
+        cx = bestCx;
+        cz = bestCz;
+      }
     }
 
     placed.push({ cx, cz, R });

@@ -100,15 +100,18 @@ function paintBackground(
   }
   (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
-  // 2000 个稀疏噪点
+  // 2000 个稀疏噪点（边缘羽化：距边 < FEATHER_DIST 时按比例丢弃）
+  const FEATHER_DIST = 30;
   (ctx as unknown as Record<string, unknown>).fillStyle = 'rgba(90,90,86,0.05)';
   for (let i = 0; i < 2000; i++) {
     const nx = minX + rng() * (maxX - minX);
     const nz = minZ + rng() * (maxZ - minZ);
-    ctx.fillRect(nx, nz, 1, 1);
+    const distToEdge = Math.min(nx - minX, maxX - nx, nz - minZ, maxZ - nz);
+    const draw = rng() < (distToEdge < FEATHER_DIST ? distToEdge / FEATHER_DIST : 1);
+    if (draw) ctx.fillRect(nx, nz, 1, 1);
   }
 
-  // 140 条短纤维线
+  // 140 条短纤维线（边缘羽化：距边 < FEATHER_DIST 时按比例丢弃）
   (ctx as unknown as Record<string, unknown>).strokeStyle = 'rgba(90,90,86,0.07)';
   (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
   for (let i = 0; i < 140; i++) {
@@ -116,10 +119,14 @@ function paintBackground(
     const fz = minZ + rng() * (maxZ - minZ);
     const angle = rng() * Math.PI * 2;
     const len = 4 + rng() * 6; // 4-10 世界单位
-    ctx.beginPath();
-    ctx.moveTo(fx, fz);
-    ctx.lineTo(fx + Math.cos(angle) * len, fz + Math.sin(angle) * len);
-    ctx.stroke();
+    const fDistToEdge = Math.min(fx - minX, maxX - fx, fz - minZ, maxZ - fz);
+    const drawF = rng() < (fDistToEdge < FEATHER_DIST ? fDistToEdge / FEATHER_DIST : 1);
+    if (drawF) {
+      ctx.beginPath();
+      ctx.moveTo(fx, fz);
+      ctx.lineTo(fx + Math.cos(angle) * len, fz + Math.sin(angle) * len);
+      ctx.stroke();
+    }
   }
 }
 
@@ -1474,19 +1481,26 @@ function paintExtras(
     const wallStartZ = sinM * wallSide + cosM * (-wallH / 2);
     const wallEndX   = cosM * wallSide - sinM * (wallH / 2);
     const wallEndZ   = sinM * wallSide + cosM * (wallH / 2);
+    // 将长墙线分段（每段 ≤ 30 世界单位），避免长直斜线伪影
+    const wallSegCount = Math.max(2, Math.ceil(wallH / 30));
+    const wallPts: [number, number][] = [];
+    for (let wi = 0; wi <= wallSegCount; wi++) {
+      const t = wi / wallSegCount;
+      wallPts.push([
+        wallStartX + (wallEndX - wallStartX) * t,
+        wallStartZ + (wallEndZ - wallStartZ) * t,
+      ]);
+    }
     // 外墙线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.mountain;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
-    wobblyPath(ctx, rng, [[wallStartX, wallStartZ], [wallEndX, wallEndZ]], 0.5);
+    wobblyPath(ctx, rng, wallPts, 0.5);
     ctx.stroke();
     // 内墙线（偏移 1.2 世界单位）
     const innerOff = 1.2;
-    const innerStartX = wallStartX - cosM * innerOff;
-    const innerStartZ = wallStartZ - sinM * innerOff;
-    const innerEndX   = wallEndX   - cosM * innerOff;
-    const innerEndZ   = wallEndZ   - sinM * innerOff;
+    const innerPts: [number, number][] = wallPts.map(([px, pz]) => [px - cosM * innerOff, pz - sinM * innerOff]);
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
-    wobblyPath(ctx, rng, [[innerStartX, innerStartZ], [innerEndX, innerEndZ]], 0.4);
+    wobblyPath(ctx, rng, innerPts, 0.4);
     ctx.stroke();
     // 垛口齿（沿外墙线每隔 3 世界单位一个垛口）
     const wallLen = Math.hypot(wallEndX - wallStartX, wallEndZ - wallStartZ);
@@ -1703,64 +1717,181 @@ function paintTransport(
   const { airport } = transport;
   if (airport) {
     const apRng = rng0(wsPrefix + ':airport:draw');
-    const { x: apx, z: apz, ang, len } = airport;
+    const { x: apx, z: apz, ang, len, width } = airport;
 
     ctx.save();
     ctx.translate(apx, apz);
     ctx.rotate(ang);
 
-    // 跑道 wobblyRect
+    const hw = width / 2;   // 跑道半宽
+
+    // 1. 跑道带（浅灰，宽 width=7，长 len=36）
     (ctx as unknown as Record<string, unknown>).fillStyle = '#d8d4c8';
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
-    wobblyRect(ctx, apRng, -len / 2, -2, len, 4, 0.5);
+    wobblyRect(ctx, apRng, -len / 2, -hw, len, width, 0.5);
     ctx.fill();
-    wobblyRect(ctx, apRng, -len / 2, -2, len, 4, 0.5);
+    wobblyRect(ctx, apRng, -len / 2, -hw, len, width, 0.5);
     ctx.stroke();
 
-    // 中线虚线
+    // 2. 白中线虚线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
     dashedPath(ctx, [[-len / 2 + 2, 0], [len / 2 - 2, 0]], [4, 3]);
 
-    // 端带 hatch
-    hatchRect(ctx, apRng, -len / 2, -2, 4, 4, 3, PAPER.inkFaded);
-    hatchRect(ctx, apRng, len / 2 - 4, -2, 4, 4, 3, PAPER.inkFaded);
+    // 3. 两端横棒（跑道两端的白色阈值线）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.4;
+    for (const ex of [-len / 2 + 1, len / 2 - 1]) {
+      ctx.beginPath();
+      ctx.moveTo(ex, -hw + 0.5);
+      ctx.lineTo(ex, hw - 0.5);
+      ctx.stroke();
+    }
 
-    // 小塔台 2×4（右侧）
+    // 4. 端带 hatch（端头标记）
+    hatchRect(ctx, apRng, -len / 2, -hw, 5, width, 3, PAPER.inkFaded);
+    hatchRect(ctx, apRng, len / 2 - 5, -hw, 5, width, 3, PAPER.inkFaded);
+
+    // 5. 停机坪（taxiway + apron 矩形，局部坐标）
+    const apronW = 14, apronD = 10;
+    const { dx: apDx, dz: apDz } = airport.apron;
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#ccc8bc';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    wobblyRect(ctx, apRng, apDx - apronW / 2, apDz - apronD / 2, apronW, apronD, 0.4);
+    ctx.fill();
+    wobblyRect(ctx, apRng, apDx - apronW / 2, apDz - apronD / 2, apronW, apronD, 0.4);
+    ctx.stroke();
+
+    // 滑行道（跑道到停机坪的连接线，窄带）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#c8c4b8';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(apDx, -hw);       // 跑道边缘
+    ctx.lineTo(apDx, apDz + apronD / 2);  // 停机坪边
+    ctx.stroke();
+
+    // 6. 停机坪 2 架小飞机涂鸦（不同朝向）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+    const planePositions: Array<{px: number; pz: number; angle: number}> = [
+      { px: apDx - 3, pz: apDz - 1, angle: 0.3 },
+      { px: apDx + 3, pz: apDz + 2, angle: Math.PI - 0.2 },
+    ];
+    for (const { px: ppx, pz: ppz, angle: pang } of planePositions) {
+      ctx.save();
+      ctx.translate(ppx, ppz);
+      ctx.rotate(pang);
+      // 机身（水平线）
+      ctx.beginPath();
+      ctx.moveTo(-2.5, 0);
+      ctx.lineTo(2.5, 0);
+      ctx.stroke();
+      // 主翼（垂直线，位于机身中偏后）
+      ctx.beginPath();
+      ctx.moveTo(-0.5, -2);
+      ctx.lineTo(-0.5, 2);
+      ctx.stroke();
+      // 尾翼（短线）
+      ctx.beginPath();
+      ctx.moveTo(1.8, -0.8);
+      ctx.lineTo(1.8, 0.8);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 7. 航站楼（wobblyRect 小楼 + 顶棚线）
+    const termW = 8, termD = 4;
+    const termX = airport.tower.dx - 2, termZ = airport.tower.dz + 3;
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#f0ead8';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
+    wobblyRect(ctx, apRng, termX, termZ, termW, termD, 0.4);
+    ctx.fill();
+    wobblyRect(ctx, apRng, termX, termZ, termW, termD, 0.4);
+    ctx.stroke();
+    // 顶棚线（沿宽度方向 2 条短线）
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    ctx.beginPath();
+    ctx.moveTo(termX + termW * 0.2, termZ);
+    ctx.lineTo(termX + termW * 0.2, termZ - 1.5);
+    ctx.moveTo(termX + termW * 0.8, termZ);
+    ctx.lineTo(termX + termW * 0.8, termZ - 1.5);
+    ctx.stroke();
+
+    // 8. 机库（半圆拱形，用弧线绘制）
+    const { dx: hgDx, dz: hgDz } = airport.hangar;
+    const hgW = 5, hgH = 4;
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#d8d0c0';
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+    ctx.beginPath();
+    ctx.moveTo(hgDx - hgW / 2, hgDz + hgH / 2);
+    ctx.lineTo(hgDx - hgW / 2, hgDz);
+    ctx.arc(hgDx, hgDz, hgW / 2, Math.PI, 0, false);
+    ctx.lineTo(hgDx + hgW / 2, hgDz + hgH / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 9. 塔台（小圆顶塔）
+    const { dx: twDx, dz: twDz } = airport.tower;
+    // 塔身（wobblyRect）
     (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.paper;
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
-    wobblyRect(ctx, apRng, len / 2 - 2, -4, 2, 4, 0.3);
+    wobblyRect(ctx, apRng, twDx - 1, twDz - 5, 2, 5, 0.3);
     ctx.fill();
-    wobblyRect(ctx, apRng, len / 2 - 2, -4, 2, 4, 0.3);
+    wobblyRect(ctx, apRng, twDx - 1, twDz - 5, 2, 5, 0.3);
     ctx.stroke();
-
-    // 顶部控制室（小方块）
+    // 控制室（小方块圆顶）
     (ctx as unknown as Record<string, unknown>).fillStyle = '#c8dce0';
-    wobblyRect(ctx, apRng, len / 2 - 2.5, -5, 3, 1.5, 0.2);
+    wobblyRect(ctx, apRng, twDx - 1.5, twDz - 6.5, 3, 1.5, 0.2);
     ctx.fill();
     ctx.stroke();
 
-    // 停机飞机涂鸦（跑道侧）
+    // 10. 风向袋（斜杆 + 小三角旗）
+    const wsX = len / 2 - 8, wsZ = hw + 3;  // 跑道侧方
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
-    const planeX = -6;
-    const planeZ = -5;
-    // 机身
     ctx.beginPath();
-    ctx.moveTo(planeX - 2, planeZ);
-    ctx.lineTo(planeX + 2, planeZ);
+    ctx.moveTo(wsX, wsZ);
+    ctx.lineTo(wsX - 1, wsZ - 4);   // 斜杆
     ctx.stroke();
-    // 机翼
+    // 三角旗（橙色）
+    (ctx as unknown as Record<string, unknown>).fillStyle = '#e06020';
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
     ctx.beginPath();
-    ctx.moveTo(planeX - 0.5, planeZ);
-    ctx.lineTo(planeX - 0.5, planeZ - 1.5);
-    ctx.moveTo(planeX - 0.5, planeZ);
-    ctx.lineTo(planeX - 0.5, planeZ + 1.5);
-    ctx.stroke();
+    ctx.moveTo(wsX - 1, wsZ - 4);
+    ctx.lineTo(wsX + 1.5, wsZ - 3.5);
+    ctx.lineTo(wsX - 1, wsZ - 2.5);
+    ctx.closePath();
+    ctx.fill();
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
     ctx.restore();
+
+    // 11. accessRoad（乡间路，narrow roadFill 带，在 ctx.restore() 之后，世界坐标）
+    if (airport.accessRoad.length >= 2) {
+      const arPts = airport.accessRoad;
+      const arLeft = offsetPolyline(arPts as ReadonlyArray<readonly [number, number]>, 1);
+      const arRight = offsetPolyline(arPts as ReadonlyArray<readonly [number, number]>, -1);
+      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.roadFill;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(arLeft[0][0], arLeft[0][1]);
+      for (const p of arLeft) ctx.lineTo(p[0], p[1]);
+      for (let i = arRight.length - 1; i >= 0; i--) ctx.lineTo(arRight[i][0], arRight[i][1]);
+      ctx.closePath();
+      ctx.fill();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+      wobblyPath(ctx, rng, arPts as [number, number][], 1.2);
+      ctx.stroke();
+    }
   }
 
   // 轮渡
