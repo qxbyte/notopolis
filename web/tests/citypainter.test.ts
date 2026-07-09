@@ -166,3 +166,14 @@ describe('T5 — 聚落内树木减量', () => {
     expect(qcCount).toBeLessThan(2300);
   });
 });
+
+describe('T6 — Zoo 出现时确定性', () => {
+  it('两次 paintCity（plains theme）ctx 调用序列完全相同', () => {
+    // Zoo appears 0-2 times based on rng — we just verify determinism, not count
+    const { world: w1, calls: c1 } = makeMockWorld();
+    const { world: w2, calls: c2 } = makeMockWorld();
+    paintCity(w1 as never, fixture, params, 'test');
+    paintCity(w2 as never, fixture, params, 'test');
+    expect(c1).toEqual(c2);
+  });
+});

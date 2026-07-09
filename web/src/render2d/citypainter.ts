@@ -1924,6 +1924,160 @@ function paintTransport(
 }
 
 /* ------------------------------------------------------------------ */
+/* 旷野元素 — 动物园                                                    */
+/* ------------------------------------------------------------------ */
+
+function paintZoo(
+  ctx: CanvasRenderingContext2D,
+  rng: () => number,
+  cx: number,
+  cz: number,
+  theme: string,
+): void {
+  const isSnow = theme === 'snow';
+  const fenceR = 10 + rng() * 4; // 10-14
+
+  // 围栏圈（wobbly 闭合圆，wobble 大 → 不规则）
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
+  wobblyCircle(ctx, rng, cx, cz, fenceR, 0.18);
+  ctx.stroke();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 围栏短竖线（栏杆，每 2 单位一根，沿圆弧均匀采样）
+  const railCount = Math.floor(fenceR * Math.PI); // ~周长/2
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  for (let ri = 0; ri < railCount; ri++) {
+    const ang = (ri / railCount) * Math.PI * 2;
+    const rx = cx + Math.cos(ang) * fenceR;
+    const rz = cz + Math.sin(ang) * fenceR;
+    const outX = cx + Math.cos(ang) * (fenceR + 1.0);
+    const outZ = cz + Math.sin(ang) * (fenceR + 1.0);
+    ctx.beginPath();
+    ctx.moveTo(rx, rz);
+    ctx.lineTo(outX, outZ);
+    ctx.stroke();
+  }
+
+  // 入口小门房（缺口朝南，wobblyRect）
+  const gateZ = cz + fenceR - 0.5;
+  (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.roadFill;
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+  wobblyRect(ctx, rng, cx - 1.0, gateZ, 2.0, 1.5, 0.3);
+  ctx.fill();
+  wobblyRect(ctx, rng, cx - 1.0, gateZ, 2.0, 1.5, 0.3);
+  ctx.stroke();
+
+  // 2-3 个小圈舍
+  const enclosureCount = 2 + Math.floor(rng() * 2);
+  for (let ei = 0; ei < enclosureCount; ei++) {
+    const ang = (ei / enclosureCount) * Math.PI * 2 + rng() * 0.5;
+    const er = fenceR * (0.35 + rng() * 0.2);
+    const ex = cx + Math.cos(ang) * er;
+    const ez = cz + Math.sin(ang) * er;
+    const encR = 2 + rng() * 1.5;
+
+    // 圈舍边界
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    wobblyCircle(ctx, rng, ex, ez, encR, 0.1);
+    ctx.stroke();
+
+    // 动物涂鸦（2-3 笔极简）
+    const animalCount = 2 + Math.floor(rng() * 2);
+    for (let ai = 0; ai < animalCount; ai++) {
+      const ax2 = ex + (rng() - 0.5) * encR * 1.2;
+      const az2 = ez + (rng() - 0.5) * encR * 1.2;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+
+      if (isSnow) {
+        if (ai % 2 === 0) {
+          // 驯鹿（reindeer）: oval body + forked antlers
+          wobblyCircle(ctx, rng, ax2, az2, 0.8, 0.15);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax2, az2 - 0.8);
+          ctx.lineTo(ax2 - 0.6, az2 - 1.6);
+          ctx.moveTo(ax2 - 0.3, az2 - 1.2);
+          ctx.lineTo(ax2 - 0.8, az2 - 1.0);
+          ctx.moveTo(ax2, az2 - 0.8);
+          ctx.lineTo(ax2 + 0.6, az2 - 1.6);
+          ctx.moveTo(ax2 + 0.3, az2 - 1.2);
+          ctx.lineTo(ax2 + 0.8, az2 - 1.0);
+          ctx.stroke();
+        } else {
+          // 雪枭（snow-owl）: circle body + two triangle ears + two dot eyes
+          wobblyCircle(ctx, rng, ax2, az2, 0.65, 0.12);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax2 - 0.3, az2 - 0.65);
+          ctx.lineTo(ax2 - 0.55, az2 - 1.1);
+          ctx.lineTo(ax2 - 0.05, az2 - 0.95);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax2 + 0.3, az2 - 0.65);
+          ctx.lineTo(ax2 + 0.55, az2 - 1.1);
+          ctx.lineTo(ax2 + 0.05, az2 - 0.95);
+          ctx.closePath();
+          ctx.stroke();
+          (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.ink;
+          ctx.fillRect(ax2 - 0.2, az2 - 0.25, 0.15, 0.15);
+          ctx.fillRect(ax2 + 0.05, az2 - 0.25, 0.15, 0.15);
+        }
+      } else {
+        // 轮换：长颈鹿/象/鹿 by index
+        const kind = ai % 3;
+        if (kind === 0) {
+          // 长颈鹿：长脖子竖线 + 小圆头
+          ctx.beginPath();
+          ctx.moveTo(ax2, az2);
+          ctx.lineTo(ax2 + 0.3, az2 - 1.8); // 脖颈斜线
+          ctx.stroke();
+          wobblyCircle(ctx, rng, ax2 + 0.3, az2 - 2.0, 0.35, 0.12);
+          ctx.stroke();
+          // 斑点（2个小方点）
+          ctx.fillRect(ax2 - 0.2, az2 - 0.5, 0.25, 0.25);
+          ctx.fillRect(ax2 + 0.1, az2 - 0.8, 0.2, 0.2);
+        } else if (kind === 1) {
+          // 象：大耳朵圆身
+          wobblyCircle(ctx, rng, ax2, az2, 0.75, 0.12); // 身体
+          ctx.stroke();
+          // 大耳朵（左侧半圆弧）
+          ctx.beginPath();
+          ctx.arc(ax2 - 0.75, az2, 0.5, -Math.PI / 2, Math.PI / 2);
+          ctx.stroke();
+        } else {
+          // 鹿：分叉角
+          ctx.beginPath();
+          ctx.moveTo(ax2, az2);
+          ctx.lineTo(ax2, az2 - 1.2); // 脖颈
+          ctx.stroke();
+          // 左分叉
+          ctx.beginPath();
+          ctx.moveTo(ax2, az2 - 1.0);
+          ctx.lineTo(ax2 - 0.5, az2 - 1.5);
+          ctx.moveTo(ax2 - 0.3, az2 - 1.2);
+          ctx.lineTo(ax2 - 0.7, az2 - 1.1);
+          ctx.stroke();
+          // 右分叉
+          ctx.beginPath();
+          ctx.moveTo(ax2, az2 - 1.0);
+          ctx.lineTo(ax2 + 0.5, az2 - 1.5);
+          ctx.moveTo(ax2 + 0.3, az2 - 1.2);
+          ctx.lineTo(ax2 + 0.7, az2 - 1.1);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 层 6.5 — 旷野填充                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -2116,6 +2270,17 @@ function paintWilderness(
     ctx.moveTo(cx - 1.5, cz + benchOff + 0.7);
     ctx.lineTo(cx + 1.5, cz + benchOff + 0.7);
     ctx.stroke();
+  }
+
+  // 动物园：0-2 处（rng 决定，candidates 足够时出现）
+  const zooCount = Math.min(
+    Math.floor(rng() * 3), // 0-2
+    Math.max(0, candidates.length - meadowCount - forestPatchCount - parkCount),
+  );
+  for (let zi = 0; zi < zooCount; zi++) {
+    const candidateIdx = (meadowCount + forestPatchCount + parkCount + zi) % candidates.length;
+    const [zx, zz] = candidates[candidateIdx];
+    paintZoo(ctx, rng, zx, zz, theme);
   }
 
   void biome;
