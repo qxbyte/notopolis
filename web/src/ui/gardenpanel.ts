@@ -1,8 +1,10 @@
 /**
- * ui/gardenpanel.ts — 园丁清单侧栏（F5）。列出最久未打理的建筑，引导回访。
- * 语义：数据只有 mtime，口径是「最久未修改」（不是「未访问」）。
+ * ui/gardenpanel.ts — 园丁清单侧栏（F5），目录树形式。
+ * 语义：口径是「最久未修改」（数据只有 mtime）。
  */
 import { createSidePanel } from './panel';
+import { buildTree, renderTree } from '../util/tree';
+import { ICON } from './icons';
 
 export interface GardenItem {
   notePath: string;
@@ -39,37 +41,36 @@ export function createGardenPanel(
 
   function onBodyClick(e: MouseEvent): void {
     const el = e.target as HTMLElement;
+    const fhead = el.closest<HTMLElement>('.tree-folder-head');
+    if (fhead) {
+      fhead.parentElement?.classList.toggle('collapsed');
+      return;
+    }
     const row = el.closest<HTMLElement>('.panel-item');
-    if (!row) return;
-    const notePath = row.getAttribute('data-path');
-    if (notePath && el.classList.contains('act-locate')) opts.onLocate(notePath);
+    if (notePathOf(row) && el.classList.contains('act-locate')) opts.onLocate(notePathOf(row)!);
+  }
+  function notePathOf(row: HTMLElement | null): string | null {
+    return row?.getAttribute('data-path') ?? null;
   }
   body.addEventListener('click', onBodyClick);
-
-  /** 笔记的父目录路径（vault 相对），用于区分同名文档 */
-  function parentDir(notePath: string): string {
-    const slash = notePath.lastIndexOf('/');
-    return slash >= 0 ? notePath.slice(0, slash) : '';
-  }
 
   function refresh(items: GardenItem[]): void {
     if (items.length === 0) {
       body.innerHTML = '<div class="panel-empty">城中还没有建筑。</div>';
       return;
     }
-    body.innerHTML = items
-      .map((it) => {
-        const parent = parentDir(it.notePath);
-        const pathLine = parent ? `<div class="pi-path">${esc(parent)}</div>` : '';
-        return (
-          `<div class="panel-item" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}">` +
-          `<div class="grow"><div class="pi-main">🌱 ${esc(it.title)} · ${it.daysSince} 天前</div>${pathLine}</div>` +
-          `<span class="act act-locate">定位</span>` +
-          `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
-          `</div>`
-        );
-      })
-      .join('');
+    const tree = buildTree(items.map((it) => ({ notePath: it.notePath, data: it })));
+    body.innerHTML = renderTree(tree, (leaf, depth) => {
+      const it = leaf.data;
+      const pad = (depth + 1) * 14 + 12;
+      return (
+        `<div class="panel-item tree-leaf" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}" style="padding-left:${pad}px">` +
+        `<span class="grow"><span class="pi-icon">${ICON.sprout}</span>${esc(leaf.name)} · ${it.daysSince} 天前</span>` +
+        `<span class="act act-locate">定位</span>` +
+        `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
+        `</div>`
+      );
+    });
   }
 
   return {

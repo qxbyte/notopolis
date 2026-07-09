@@ -20,10 +20,10 @@ export const THEME_LABELS: Record<string, string> = {
 export interface HUDHandle {
   setStats(text: string): void;
   setTip(text: string): void;
-  /** 在右上按钮栏加一个纸片按钮，返回引用（便于改文案 / dispose）；title 为悬浮说明 */
+  /** 右上按钮栏加一个动作纸片按钮（label 可含内联 SVG）；title 为悬浮说明 */
   addButton(label: string, onClick: () => void, title?: string): HTMLButtonElement;
-  /** 右下透镜按钮栏容器（F4 挂按钮用） */
-  lensBar: HTMLElement;
+  /** 右上按钮栏加一个透镜按钮（.lens-btn，支持 active 高亮）；label 可含内联 SVG */
+  addLensButton(label: string, onClick: () => void, title?: string): HTMLButtonElement;
   root: HTMLElement; // #hud 元素
   dispose(): void;
 }
@@ -40,41 +40,41 @@ export function createHUD(parent: HTMLElement): HUDHandle {
   tip.textContent = tipDefaultText;
   parent.appendChild(tip);
 
-  // 右上功能按钮栏（搜索/工地/漫游/海报）
+  // 右上功能按钮栏（搜索/漫游/透镜组）
   const bar = document.createElement('div');
   bar.className = 'hud-bar';
   parent.appendChild(bar);
 
-  // 右下透镜按钮栏
-  const lensBar = document.createElement('div');
-  lensBar.className = 'lens-bar';
-  parent.appendChild(lensBar);
-
   const stats = hud.querySelector<HTMLElement>('#stats')!;
+
+  function mkButton(cls: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = cls;
+    btn.innerHTML = label; // label 含受信任的内联 SVG（来自 ui/icons）
+    if (title) btn.title = title;
+    btn.addEventListener('click', onClick);
+    bar.appendChild(btn);
+    return btn;
+  }
 
   return {
     root: hud,
-    lensBar,
     setStats(text: string): void {
       stats.textContent = text;
     },
     setTip(text: string): void {
       tip.textContent = text;
     },
-    addButton(label: string, onClick: () => void, title?: string): HTMLButtonElement {
-      const btn = document.createElement('button');
-      btn.className = 'hud-btn';
-      btn.textContent = label;
-      if (title) btn.title = title;
-      btn.addEventListener('click', onClick);
-      bar.appendChild(btn);
-      return btn;
+    addButton(label, onClick, title) {
+      return mkButton('hud-btn', label, onClick, title);
+    },
+    addLensButton(label, onClick, title) {
+      return mkButton('lens-btn', label, onClick, title);
     },
     dispose(): void {
       hud.remove();
       tip.remove();
       bar.remove();
-      lensBar.remove();
     },
   };
 }

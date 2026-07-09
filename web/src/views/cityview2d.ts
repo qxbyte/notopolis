@@ -19,8 +19,9 @@ import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
 import { createGardenPanel } from '../ui/gardenpanel';
-import { groupTasks, totalConstruction } from '../util/tasks';
+import { listTasks, totalConstruction } from '../util/tasks';
 import { obsidianUri } from '../ui/obsidian';
+import { ICON } from '../ui/icons';
 import { LENSES, lensById, gardenSetOf, lensHitBuildings, type LensId } from '../render2d/lenses';
 import { pickWeightedIndex, staleWeight } from '../util/random';
 import { exportPoster, downloadBlob, posterFilename } from '../ui/poster';
@@ -297,8 +298,6 @@ export function showCity2D(
   }
   const searchUI = createSearchUI(container, searchItems, decorate, (notePath) => locate(notePath));
 
-  hud.addButton('🔍 搜索', () => searchUI.open(), '按名字搜索笔记并飞行定位（⌘K / Ctrl+K）');
-
   const DAY = 86400000;
 
   // ---- 12c. 工地面板（F2）+ 园丁面板（F5）----
@@ -306,7 +305,7 @@ export function showCity2D(
     onLocate: (notePath) => locate(notePath),
     obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
   });
-  taskPanel.refresh(groupTasks(city));
+  taskPanel.refresh(listTasks(city));
 
   const gardenPanel = createGardenPanel(container, {
     onLocate: (notePath) => locate(notePath),
@@ -327,11 +326,6 @@ export function showCity2D(
   gardenPanel.refresh(gardenList);
 
   const constructionN = totalConstruction(city);
-  hud.addButton(
-    constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地',
-    () => setLens(lensId === 'tasks' ? 'none' : 'tasks'),
-    '打开工地清单：所有含未完成任务（- [ ]）的笔记，可定位或跳 Obsidian',
-  );
   // 面板经 Esc/✕ 关闭时还原透镜
   taskPanel.onClose = () => {
     if (lensId === 'tasks') setLens('none');
@@ -377,21 +371,16 @@ export function showCity2D(
 
   const LENS_TIPS: Record<LensId, string> = {
     none: '关闭图层，显示常规地图',
-    tasks: '高亮所有含未完成任务的笔记（工地）',
+    tasks: '打开工地清单：所有含未完成任务的笔记，可定位或跳 Obsidian',
     orphans: '高亮零链接的孤立笔记——该给它们连条路了',
-    garden: '高亮最久未打理的笔记，提醒你回顾',
+    garden: '打开园丁清单：最久未打理的笔记，提醒你回顾',
   };
-  // 透镜按钮组不含 tasks——工地由顶部「🚧 工地 N」按钮承担（避免重复入口）
-  for (const def of LENSES) {
-    if (def.id === 'tasks') continue;
-    const btn = document.createElement('button');
-    btn.className = 'lens-btn' + (def.id === 'none' ? ' active' : '');
-    btn.textContent = `${def.icon} ${def.label}`;
-    btn.title = LENS_TIPS[def.id];
-    btn.addEventListener('click', () => setLens(def.id));
-    hud.lensBar.appendChild(btn);
-    lensBtns.set(def.id, btn);
-  }
+  const LENS_ICON: Record<LensId, string> = {
+    none: ICON.normal,
+    tasks: ICON.tasks,
+    orphans: ICON.island,
+    garden: ICON.sprout,
+  };
 
   // ---- 12e. 随机漫步（F7）----
   const nonCivic = [...buildingIndex.values()].filter((x) => !x.b.isCivic);
@@ -411,42 +400,35 @@ export function showCity2D(
     locate(chosen.b.notePath);
     return chosen.b.notePath;
   }
-  hud.addButton('🎲 漫游', () => randomWalk(), '随机漫步到一栋冷门老笔记，与旧知识重逢');
 
-  // ---- 12f. 海报导出（F8）----
-  let posterBtn: HTMLButtonElement;
+  // ---- 12f. 海报导出（F8）——按用户要求移除按钮，仅保留 __notopolis.exportPoster 钩子 ----
   async function doExportPoster(): Promise<number> {
-    const label = posterBtn.textContent;
-    posterBtn.textContent = '⏳ 渲染中…';
-    posterBtn.disabled = true;
-    try {
-      // date 为用户主动触发时刻，豁免确定性铁律
-      const date = new Date().toISOString().slice(0, 10);
-      const blob = await exportPoster(painter, expandedBounds, {
-        name: vault.name,
-        tier: city.tier,
-        noteCount: city.noteCount,
-        activeCount7d: city.activeCount7d,
-        date,
-      });
-      if (!blob) {
-        hud.setTip('导出失败：图像过大');
-        return 0;
-      }
-      downloadBlob(blob, posterFilename(vault.name, date));
-      return blob.size;
-    } finally {
-      posterBtn.textContent = label;
-      posterBtn.disabled = false;
-    }
+    // date 为用户主动触发时刻，豁免确定性铁律
+    const date = new Date().toISOString().slice(0, 10);
+    const blob = await exportPoster(painter, expandedBounds, {
+      name: vault.name,
+      tier: city.tier,
+      noteCount: city.noteCount,
+      activeCount7d: city.activeCount7d,
+      date,
+    });
+    if (!blob) return 0;
+    downloadBlob(blob, posterFilename(vault.name, date));
+    return blob.size;
   }
-  posterBtn = hud.addButton(
-    '🖼 海报',
-    () => {
-      void doExportPoster();
-    },
-    '导出整座城市的高清海报 PNG（含城名/规模/日期）',
-  );
+
+  // ---- 12g. 顶部功能按钮栏：搜索 · 漫游 · [常规 · 工地N · 孤岛 · 园丁] ----
+  hud.addButton(`${ICON.search} 搜索`, () => searchUI.open(), '按名字搜索笔记并飞行定位（⌘K / Ctrl+K）');
+  hud.addButton(`${ICON.roam} 漫游`, () => randomWalk(), '随机漫步到一栋冷门老笔记，与旧知识重逢');
+  for (const def of LENSES) {
+    const label =
+      def.id === 'tasks' && constructionN > 0
+        ? `${ICON.tasks} 工地 ${constructionN}`
+        : `${LENS_ICON[def.id]} ${def.label}`;
+    const btn = hud.addLensButton(label, () => setLens(def.id), LENS_TIPS[def.id]);
+    if (def.id === 'none') btn.classList.add('active');
+    lensBtns.set(def.id, btn);
+  }
 
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];

@@ -51,3 +51,19 @@ export function totalConstruction(city: CityModel): number {
   for (const d of city.districts) for (const b of d.buildings) if (b.construction) n++;
   return n;
 }
+
+/** 全城工地扁平列表，按 openTasks 降序、mtime 降序、path 字典序（供目录树） */
+export function listTasks(city: CityModel): TaskItem[] {
+  const items: TaskItem[] = [];
+  for (const d of city.districts) {
+    for (const b of d.buildings) {
+      if (!b.construction) continue;
+      items.push({ notePath: b.notePath, title: b.title, openTasks: b.openTasks, mtimeMs: b.mtimeMs });
+    }
+  }
+  items.sort(
+    (a, b) =>
+      b.openTasks - a.openTasks || b.mtimeMs - a.mtimeMs || a.notePath.localeCompare(b.notePath),
+  );
+  return items;
+}
