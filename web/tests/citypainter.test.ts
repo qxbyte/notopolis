@@ -157,12 +157,11 @@ describe('T5 — 聚落内树木减量', () => {
     paintCity(world as never, fixture, params, 'test');
     // scribbleBlob does exactly 14 quadraticCurveTo per call.
     // With area/40 (old): distA+distB → max(2,10) + max(2,10) = 10+10 = 20 trees
-    //   → 20 × 14 = 280 from trees alone; total ~2430 with other sources (MEASURED)
+    //   → 20 × 14 = 280 from trees alone; total ~2500 with other sources (MEASURED)
     // With area/120 (new): max(1,3) + max(1,3) = 3+3 = 6 trees
-    //   → 6 × 14 = 84 from trees; drop by ~196; base ~2234 (measured pre-Task3)
-    // Task 3 adds paintWetland: 2-3 waterside trees → up to 3×14=42 extra calls.
-    // Measured with wetland: ~2304. Threshold < 2400: below old baseline (2430),
-    // well above new baseline (2304). Still detects any regression to area/40 formula.
+    //   → 6 × 14 = 84 from trees; Task3 adds paintWetland with 2-3 waterside trees → up to 42 extra.
+    // Measured new code total: ~2304. Threshold 2400 is midpoint between old (2500) and new (2304),
+    // maximizing margin on both sides. Still detects any regression to area/40 formula.
     const qcCount = calls.filter(c => c === 'quadraticCurveTo').length;
     expect(qcCount).toBeLessThan(2400);
   });
