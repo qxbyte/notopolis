@@ -28,6 +28,10 @@ export interface CityViewHandle {
   triggerPick(index: number): void;
   /** 性能探针：帧时间统计（供调试钩子读取） */
   perf(): Record<string, number>;
+  /** 编程式定位镜头（调试/截图用） */
+  centerOn(x: number, z: number, zoomPx: number): void;
+  /** 兴趣点坐标（park/zoo/wetland 等，调试/截图用） */
+  pois: { x: number; z: number; r: number; kind: string }[];
 }
 
 export function showCity2D(
@@ -275,6 +279,12 @@ export function showCity2D(
 
   return {
     pickableCount: hitItems.filter((i) => i.kind === 'building').length,
+
+    centerOn(x: number, z: number, zoomPx: number): void {
+      camera.setView(x, z, zoomPx);
+    },
+
+    pois: painter.pois,
 
     perf(): Record<string, number> {
       const sorted = [...frameTimes].sort((a, b) => a - b);

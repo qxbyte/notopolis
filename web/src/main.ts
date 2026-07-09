@@ -24,12 +24,16 @@ const __notopolis: {
   enterCity: (vaultId: string) => void;
   pickBuilding: (index: number) => void;
   perf: () => Record<string, number>;
+  centerOn: (x: number, z: number, zoomPx: number) => void;
+  pois: { x: number; z: number; r: number; kind: string }[];
 } = {
   view: 'onboarding',
   pickables: 0,
   enterCity,
   pickBuilding: (_index: number) => { /* 初始化前无操作 */ },
   perf: () => ({}),
+  centerOn: () => { /* 城市视图外无操作 */ },
+  pois: [],
 };
 (window as any).__notopolis = __notopolis;
 
@@ -81,6 +85,8 @@ async function goCity(vault: WorldVault): Promise<void> {
     __notopolis.pickables = cityHandle.pickableCount;
     __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
     __notopolis.perf = () => cityHandle.perf();
+    __notopolis.centerOn = (x, z, zoomPx) => cityHandle.centerOn(x, z, zoomPx);
+    __notopolis.pois = cityHandle.pois;
   } finally {
     navigating = false;
   }

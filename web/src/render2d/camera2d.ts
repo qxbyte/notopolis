@@ -13,6 +13,8 @@ export interface Camera2D {
   apply(ctx: CanvasRenderingContext2D): void;
   onChange(cb: () => void): void;
   consumeDragMoved(): boolean;
+  /** 编程式定位镜头（调试/定位用）：center 与 zoom 均按边界钳制并触发 onChange */
+  setView(cx: number, cz: number, zoomPx: number): void;
   dispose(): void;
 }
 
@@ -161,6 +163,12 @@ export function createCamera2D(
       const v = dragMoved;
       dragMoved = false;
       return v;
+    },
+    setView(cx: number, cz: number, zoomPx: number) {
+      zoom = clamp(zoomPx, zoomMin, zoomMax);
+      center.x = clamp(cx, minX, maxX);
+      center.z = clamp(cz, minZ, maxZ);
+      notify();
     },
     dispose() {
       canvas.removeEventListener('mousedown', onMouseDown);
