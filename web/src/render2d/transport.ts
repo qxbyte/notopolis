@@ -45,6 +45,7 @@ export interface Airport {
 export interface FerryRoute {
   route: [number, number][];        // 航线折线点（世界坐标）
   docks: { x: number; z: number; districtDir: string }[];  // 两端渡口
+  accessPaths: [[number, number][], [number, number][]];   // 两条乡间小路（区边缘顶点 → 渡口）
 }
 
 export interface MSTEdgePublic {
@@ -436,7 +437,7 @@ function buildFerry(
       [dock2.x, dock2.z],
     ];
 
-    return { route, docks: [dock1, dock2] };
+    return { route, docks: [dock1, dock2], accessPaths: [[], []] };
   }
 
   // river / torrent: 找相对河心线 u_signed 符号相反的两个区
@@ -473,42 +474,61 @@ function buildFerry(
 
   if (!distA || !distB) return null;
 
-  // 朝向河的 polygon 顶点：|u_signed| 最小且与区中心同侧
-  function closestVertToRiver(d: District, districtUSigned: number): [number, number] {
-    let bestV: [number, number] = d.polygon[0];
-    let bestAbsU = Infinity;
+  // 计算两区中心的河向坐标系纵向坐标 v（v = -x·sinR + z·cosR）
+  const [cxA, czA] = districtCenter(distA);
+  const [cxB, czB] = districtCenter(distB);
+  const vA = -cxA * sinR + czA * cosR;
+  const vB = -cxB * sinR + czB * cosR;
+  // 渡口过河点：取两区 v 坐标的中点作为跨河 v*
+  const vCross = (vA + vB) / 2;
+
+  // 渡口在河心线处的 u 坐标
+  const uCenter = riverUFn(vCross);
+
+  // 两渡口分居河两岸，偏移 RIVER_W/2 + 1.8（各自在该侧的岸边）
+  const { RIVER_W } = params;
+  const dockOffset = RIVER_W / 2 + 1.8;
+
+  // 根据 uSignedA/uSignedB 的符号确定各区在哪一侧
+  // uSigned > 0 → 在河的正 u 侧；uSigned < 0 → 在负 u 侧
+  const uA_dock = uCenter + (uSignedA > 0 ? dockOffset : -dockOffset);
+  const uB_dock = uCenter + (uSignedB > 0 ? dockOffset : -dockOffset);
+
+  // 换回世界坐标：x = u·cosR - v·sinR, z = u·sinR + v·cosR
+  const dockAx = uA_dock * cosR - vCross * sinR;
+  const dockAz = uA_dock * sinR + vCross * cosR;
+  const dockBx = uB_dock * cosR - vCross * sinR;
+  const dockBz = uB_dock * sinR + vCross * cosR;
+
+  const dock1 = { x: dockAx, z: dockAz, districtDir: distA.dir };
+  const dock2 = { x: dockBx, z: dockBz, districtDir: distB.dir };
+
+  // 航线：短线垂直过河（dockA → dockB）
+  const route: [number, number][] = [[dockAx, dockAz], [dockBx, dockBz]];
+
+  // accessPaths：从各区 polygon 上距渡口最近的顶点到渡口
+  function nearestPolyVert(d: District, tx: number, tz: number): [number, number] {
+    let bestV: [number, number] = [d.x + d.width / 2, d.z + d.depth / 2];
+    let bestDist = Infinity;
     for (const v of d.polygon) {
-      const vertU = uSigned(v[0], v[1]);
-      // 只考虑与区中心同侧的顶点（符号相同），取 |u_signed| 最小的（最靠近河）
-      if (vertU * districtUSigned > 0) {
-        const absU = Math.abs(vertU);
-        if (absU < bestAbsU) {
-          bestAbsU = absU;
-          bestV = [v[0], v[1]];
-        }
-      }
-    }
-    // 如果没有同侧顶点（多边形较小），退回到绝对最近的顶点
-    if (bestAbsU === Infinity) {
-      for (const v of d.polygon) {
-        const absU = Math.abs(uSigned(v[0], v[1]));
-        if (absU < bestAbsU) {
-          bestAbsU = absU;
-          bestV = [v[0], v[1]];
-        }
+      const dd = Math.hypot(v[0] - tx, v[1] - tz);
+      if (dd < bestDist) {
+        bestDist = dd;
+        bestV = [v[0], v[1]];
       }
     }
     return bestV;
   }
 
-  const va = closestVertToRiver(distA, uSignedA);
-  const vb = closestVertToRiver(distB, uSignedB);
+  const edgeA = nearestPolyVert(distA, dockAx, dockAz);
+  const edgeB = nearestPolyVert(distB, dockBx, dockBz);
 
-  const dock1 = { x: va[0], z: va[1], districtDir: distA.dir };
-  const dock2 = { x: vb[0], z: vb[1], districtDir: distB.dir };
-  const route: [number, number][] = [[va[0], va[1]], [vb[0], vb[1]]];
+  const accessPaths: [[number, number][], [number, number][]] = [
+    [edgeA, [dockAx, dockAz]],
+    [edgeB, [dockBx, dockBz]],
+  ];
 
-  return { route, docks: [dock1, dock2] };
+  return { route, docks: [dock1, dock2], accessPaths };
 }
 
 /* ------------------------------------------------------------------ */

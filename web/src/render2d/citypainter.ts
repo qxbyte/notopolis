@@ -1917,6 +1917,28 @@ function paintTransport(
       dashedPath(ctx, ferry.route, [4, 5]);
       (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
     }
+
+    // 渡口 accessPaths：乡间小路（复用 accessRoad 乡间路画法）
+    if (ferry.accessPaths) {
+      for (const apPts of ferry.accessPaths) {
+        if (apPts.length < 2) continue;
+        const arLeft = offsetPolyline(apPts as ReadonlyArray<readonly [number, number]>, 1);
+        const arRight = offsetPolyline(apPts as ReadonlyArray<readonly [number, number]>, -1);
+        (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.roadFill;
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(arLeft[0][0], arLeft[0][1]);
+        for (const p of arLeft) ctx.lineTo(p[0], p[1]);
+        for (let i = arRight.length - 1; i >= 0; i--) ctx.lineTo(arRight[i][0], arRight[i][1]);
+        ctx.closePath();
+        ctx.fill();
+        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.roadEdge;
+        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+        wobblyPath(ctx, frRng, apPts as [number, number][], 1.2);
+        ctx.stroke();
+      }
+    }
   }
 
   void params;

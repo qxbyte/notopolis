@@ -258,6 +258,7 @@ describe('T7 ferry river two sides', () => {
       noteCount: 20, activeCount7d: 1, generatedAt: NOW,
     };
 
+    const RIVER_W = 6;
     const baseParams = makeTestParams();
     const mockParams = {
       ...baseParams,
@@ -267,12 +268,36 @@ describe('T7 ferry river two sides', () => {
       // river at u=0: riverU(v) = 0 for all v
       riverU: (_v: number) => 0,
       riverDist: (x: number, _z: number) => Math.abs(x),  // river at x=0
-      RIVER_W: 6,
+      RIVER_W,
     };
 
     const net = buildTransport(city, mockParams, 'ferry-river-test');
     expect(net.ferry).not.toBeNull();
-    expect(net.ferry!.docks).toHaveLength(2);
+    const ferry = net.ferry!;
+    expect(ferry.docks).toHaveLength(2);
+
+    // 短渡断言：航线长度 ≤ RIVER_W + 6
+    const [r0, r1] = ferry.route;
+    const routeLen = Math.hypot(r1[0] - r0[0], r1[1] - r0[1]);
+    expect(routeLen).toBeLessThanOrEqual(RIVER_W + 6);
+
+    // 两渡口分居河两侧（cosR=1,sinR=0 → u = x，故 dock.x 符号应相反）
+    // u_signed = x - riverU(v) = x - 0 = x
+    const [d0, d1] = ferry.docks;
+    expect(d0.x * d1.x).toBeLessThan(0);
+
+    // accessPaths 存在且起点在各自区 bbox 附近
+    expect(ferry.accessPaths).toBeDefined();
+    expect(ferry.accessPaths).toHaveLength(2);
+
+    // distA center=(-30,0), bbox half≈10 → radius~14.14; accessPath[0] start dist < 14.14*1.5≈21.2
+    const startA = ferry.accessPaths[0][0];
+    const distToCenterA = Math.hypot(startA[0] - (-30), startA[1] - 0);
+    expect(distToCenterA).toBeLessThan(15 * 1.5); // bbox half diagonal ≈ 14.14
+
+    const startB = ferry.accessPaths[1][0];
+    const distToCenterB = Math.hypot(startB[0] - 40, startB[1] - 0);
+    expect(distToCenterB).toBeLessThan(15 * 1.5);
   });
 });
 
