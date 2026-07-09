@@ -24,7 +24,8 @@
 }
 
 /* ---- 地图内 HUD 与悬浮标签 ---- */
-#hud { position: fixed; top: 14px; left: 16px; color: var(--ink); pointer-events: none; }
+/* top 下移到「返回世界地图」按钮下方，避免遮挡统计文字 */
+#hud { position: fixed; top: 52px; left: 16px; color: var(--ink); pointer-events: none; }
 #hud h1 { margin: 0; font-size: 17px; letter-spacing: 4px; font-family: var(--font-display); }
 #hud .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; font-family: var(--font-hand); }
 
@@ -37,7 +38,8 @@
        font-family: var(--font-hand); }
 
 /* ---- 建筑/街区信息卡：图书馆索引卡 ---- */
-#card { position: fixed; top: 18px; right: 18px; width: 300px;
+/* top 下移到功能按钮栏下方，避免标题被遮挡 */
+#card { position: fixed; top: 56px; right: 18px; width: 300px; max-height: calc(100vh - 72px); overflow-y: auto;
         background:
           linear-gradient(var(--paper-card), var(--paper-card)) padding-box,
           var(--paper-card);

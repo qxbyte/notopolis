@@ -256,6 +256,7 @@ export function showCity2D(
   const backBtn = document.createElement('button');
   backBtn.id = 'back-btn';
   backBtn.textContent = '← 返回世界地图';
+  backBtn.title = '返回世界地图（Esc）';
   backBtn.addEventListener('click', onBack);
   container.appendChild(backBtn);
 
@@ -286,7 +287,7 @@ export function showCity2D(
   }
   const searchUI = createSearchUI(container, searchItems, decorate, (notePath) => locate(notePath));
 
-  hud.addButton('🔍 搜索', () => searchUI.open());
+  hud.addButton('🔍 搜索', () => searchUI.open(), '按名字搜索笔记并飞行定位（⌘K / Ctrl+K）');
 
   const DAY = 86400000;
 
@@ -316,8 +317,10 @@ export function showCity2D(
   gardenPanel.refresh(gardenList);
 
   const constructionN = totalConstruction(city);
-  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () =>
-    setLens(lensId === 'tasks' ? 'none' : 'tasks'),
+  hud.addButton(
+    constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地',
+    () => setLens(lensId === 'tasks' ? 'none' : 'tasks'),
+    '打开工地清单：所有含未完成任务（- [ ]）的笔记，可定位或跳 Obsidian',
   );
   // 面板经 Esc/✕ 关闭时还原透镜
   taskPanel.onClose = () => {
@@ -354,10 +357,19 @@ export function showCity2D(
     }
   }
 
+  const LENS_TIPS: Record<LensId, string> = {
+    none: '关闭图层，显示常规地图',
+    tasks: '高亮所有含未完成任务的笔记（工地）',
+    orphans: '高亮零链接的孤立笔记——该给它们连条路了',
+    garden: '高亮最久未打理的笔记，提醒你回顾',
+  };
+  // 透镜按钮组不含 tasks——工地由顶部「🚧 工地 N」按钮承担（避免重复入口）
   for (const def of LENSES) {
+    if (def.id === 'tasks') continue;
     const btn = document.createElement('button');
     btn.className = 'lens-btn' + (def.id === 'none' ? ' active' : '');
     btn.textContent = `${def.icon} ${def.label}`;
+    btn.title = LENS_TIPS[def.id];
     btn.addEventListener('click', () => setLens(def.id));
     hud.lensBar.appendChild(btn);
     lensBtns.set(def.id, btn);
@@ -381,7 +393,7 @@ export function showCity2D(
     locate(chosen.b.notePath);
     return chosen.b.notePath;
   }
-  hud.addButton('🎲 漫游', () => randomWalk());
+  hud.addButton('🎲 漫游', () => randomWalk(), '随机漫步到一栋冷门老笔记，与旧知识重逢');
 
   // ---- 12f. 海报导出（F8）----
   let posterBtn: HTMLButtonElement;
@@ -410,9 +422,13 @@ export function showCity2D(
       posterBtn.disabled = false;
     }
   }
-  posterBtn = hud.addButton('🖼 海报', () => {
-    void doExportPoster();
-  });
+  posterBtn = hud.addButton(
+    '🖼 海报',
+    () => {
+      void doExportPoster();
+    },
+    '导出整座城市的高清海报 PNG（含城名/规模/日期）',
+  );
 
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];
@@ -522,6 +538,11 @@ export function showCity2D(
   // ---- 15. 点击 ----
   function onClick(e: MouseEvent): void {
     if (camera.consumeDragMoved()) return;
+    // 侧边栏展开时，点击地图空白处先收起面板（并还原透镜），本次点击不再拾取建筑
+    if (taskPanel.isOpen() || gardenPanel.isOpen()) {
+      setLens('none');
+      return;
+    }
     const [wx, wz] = camera.screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     const item = hitTest(wx, wz, hitItems);
     if (!item) {

@@ -20,8 +20,8 @@ export const THEME_LABELS: Record<string, string> = {
 export interface HUDHandle {
   setStats(text: string): void;
   setTip(text: string): void;
-  /** 在右上按钮栏加一个纸片按钮，返回引用（便于改文案 / dispose） */
-  addButton(label: string, onClick: () => void): HTMLButtonElement;
+  /** 在右上按钮栏加一个纸片按钮，返回引用（便于改文案 / dispose）；title 为悬浮说明 */
+  addButton(label: string, onClick: () => void, title?: string): HTMLButtonElement;
   /** 右下透镜按钮栏容器（F4 挂按钮用） */
   lensBar: HTMLElement;
   root: HTMLElement; // #hud 元素
@@ -61,10 +61,11 @@ export function createHUD(parent: HTMLElement): HUDHandle {
     setTip(text: string): void {
       tip.textContent = text;
     },
-    addButton(label: string, onClick: () => void): HTMLButtonElement {
+    addButton(label: string, onClick: () => void, title?: string): HTMLButtonElement {
       const btn = document.createElement('button');
       btn.className = 'hud-btn';
       btn.textContent = label;
+      if (title) btn.title = title;
       btn.addEventListener('click', onClick);
       bar.appendChild(btn);
       return btn;
