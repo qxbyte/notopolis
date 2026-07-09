@@ -74,7 +74,7 @@ async function goWorldMap(): Promise<void> {
   }
 }
 
-async function goCity(vault: WorldVault): Promise<void> {
+async function goCity(vault: WorldVault, restoreTaskPanel = false): Promise<void> {
   if (navigating) return;
   navigating = true;
   try {
@@ -83,6 +83,7 @@ async function goCity(vault: WorldVault): Promise<void> {
     const city = await fetchCity(vault.id);
     const cityHandle: CityViewHandle = showCity2D(container, vault, city, goWorldMap);
     current = cityHandle;
+    if (restoreTaskPanel) cityHandle.openTaskPanel();
     __notopolis.view = 'city';
     __notopolis.pickables = cityHandle.pickableCount;
     __notopolis.pickBuilding = (index: number) => cityHandle.triggerPick(index);
@@ -96,6 +97,9 @@ async function goCity(vault: WorldVault): Promise<void> {
     dbg.pickByPath = (p: string) => cityHandle.pickByPath(p);
     dbg.openSearch = () => cityHandle.openSearch();
     dbg.search = (q: string) => cityHandle.search(q);
+    dbg.openTaskPanel = () => cityHandle.openTaskPanel();
+    dbg.closeTaskPanel = () => cityHandle.closeTaskPanel();
+    dbg.taskPanelOpen = () => cityHandle.taskPanelOpen();
   } finally {
     navigating = false;
   }
@@ -122,9 +126,12 @@ document.addEventListener('keydown', (e) => {
 
 connectWS(async (vaultId: string) => {
   if (currentVaultId === vaultId) {
+    // 整城重建前记录工地面板开关，重建后恢复（勾任务后面板不该消失）
+    const h = current as unknown as { taskPanelOpen?: () => boolean } | null;
+    const wasTaskPanelOpen = h?.taskPanelOpen?.() === true;
     const { vaults } = await fetchWorld();
     const vault = vaults.find((v) => v.id === vaultId);
-    if (vault) await goCity(vault);
+    if (vault) await goCity(vault, wasTaskPanelOpen);
   }
 });
 

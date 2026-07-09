@@ -15,6 +15,9 @@ import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
 import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
+import { createTaskPanel } from '../ui/taskpanel';
+import { groupTasks, totalConstruction } from '../util/tasks';
+import { obsidianUri } from '../ui/obsidian';
 import { PAPER, setSketchScale } from '../render2d/sketch';
 import type { WorldVault } from '../api';
 import type { CityModel, District } from '@shared/types';
@@ -46,6 +49,10 @@ export interface CityViewHandle {
   openSearch(): void;
   /** 搜索命中（调试/测试用） */
   search(query: string): { notePath: string; title: string; dir: string; score: number }[];
+  /** 打开/关闭工地面板 */
+  openTaskPanel(): void;
+  closeTaskPanel(): void;
+  taskPanelOpen(): boolean;
 }
 
 export function showCity2D(
@@ -253,6 +260,17 @@ export function showCity2D(
 
   hud.addButton('🔍 搜索', () => searchUI.open());
 
+  // ---- 12c. 工地面板（F2）----
+  const taskPanel = createTaskPanel(container, {
+    onLocate: (notePath) => locate(notePath),
+    obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
+  });
+  taskPanel.refresh(groupTasks(city));
+  const constructionN = totalConstruction(city);
+  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () =>
+    taskPanel.toggle(),
+  );
+
   // ---- 13. 帧时间统计 ----
   const frameTimes: number[] = [];
   let lastFrameT = 0;
@@ -421,6 +439,16 @@ export function showCity2D(
       return searchNotes(query, searchItems);
     },
 
+    openTaskPanel(): void {
+      taskPanel.open();
+    },
+    closeTaskPanel(): void {
+      taskPanel.close();
+    },
+    taskPanelOpen(): boolean {
+      return taskPanel.isOpen();
+    },
+
     pois: painter.pois,
 
     debugPlanePos(): { x: number; z: number; airborne: boolean } | null {
@@ -465,6 +493,7 @@ export function showCity2D(
       camera.dispose();
       canvas.remove();
       searchUI.dispose();
+      taskPanel.dispose();
       hud.dispose();
       const card = container.querySelector('#card');
       if (card) card.remove();
