@@ -261,6 +261,8 @@ describe('T7 ferry river two sides', () => {
       cosR: 1,
       sinR: 0,
       waterStyle: 'river' as const,
+      // river at u=0: riverU(v) = 0 for all v
+      riverU: (_v: number) => 0,
       riverDist: (x: number, _z: number) => Math.abs(x),  // river at x=0
       RIVER_W: 6,
     };

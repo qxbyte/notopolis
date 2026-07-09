@@ -14,6 +14,7 @@ import type { HitItem } from './hit';
 import { rng0 } from '../util/seed';
 import { buildPolyline, polyAt, segHit } from '../util/poly';
 import { PAPER, dashedPath } from './sketch';
+import { buildTransport, RailEdge } from './transport';
 
 /* ============================================================
    内部类型
@@ -65,6 +66,15 @@ interface CarState {
   bodyColor: string;
 }
 
+/** 火车状态（可变） */
+interface TrainState {
+  edgeIdx: number;     // 当前 RailEdge 索引
+  s: number;           // 沿边的弧长位置 0..edge.total
+  dir: 1 | -1;         // 移动方向
+  fromNode: number;    // 来自哪个区节点（避免立即 U 形转弯）
+  stopTimer: number;   // 停站倒计时（秒）
+}
+
 /* ============================================================
    DynamicLayer 公开接口
    ============================================================ */
@@ -78,6 +88,10 @@ export interface DynamicLayer {
   debugCarS(i: number): number;
   /** 测试辅助：返回所有市民的 kind */
   debugCitizenKinds(): CitizenKind[];
+  /** 测试辅助：返回第 i 辆火车当前世界坐标，若不存在返回 null */
+  debugTrainPos(i: number): { x: number; z: number } | null;
+  /** 测试辅助：返回渡轮当前世界坐标，若不存在返回 null */
+  debugFerryPos(): { x: number; z: number } | null;
 }
 
 /* ============================================================
@@ -127,29 +141,13 @@ function computeDynTrafficLights(roads: DynRoad[]): DynTrafficLight[] {
 }
 
 /* ============================================================
-   railAt（环线位置，本地实现）
+   隧道检测辅助
    ============================================================ */
 
-function railAt(
-  s: number,
-  railPts: [number, number][],
-  segLens: number[],
-  railTotal: number,
-): [number, number, number] {
-  s = ((s % railTotal) + railTotal) % railTotal;
-  for (let i = 0; i < 4; i++) {
-    if (s <= segLens[i] || i === 3) {
-      const p = railPts[i];
-      const q = railPts[(i + 1) % 4];
-      const f = segLens[i] > 0 ? Math.min(1, s / segLens[i]) : 0;
-      const x = p[0] + (q[0] - p[0]) * f;
-      const z = p[1] + (q[1] - p[1]) * f;
-      const ang = Math.atan2(q[0] - p[0], q[1] - p[1]);
-      return [x, z, ang];
-    }
-    s -= segLens[i];
-  }
-  return [railPts[0][0], railPts[0][1], 0];
+function inTunnel(arcPos: number, edge: RailEdge): boolean {
+  if (edge.total <= 0) return false;
+  const sNorm = arcPos / edge.total;
+  return edge.tunnels.some(([t1, t2]) => sNorm >= t1 && sNorm <= t2);
 }
 
 /* ============================================================
@@ -686,35 +684,107 @@ export function createDynamicLayer(
     }
   }
 
-  // ---- 火车环线 ----
-  const railM = 9;
-  const railPts: [number, number][] = [
-    [-params.cityHalfW - railM, -params.cityHalfD - railM],
-    [ params.cityHalfW + railM, -params.cityHalfD - railM],
-    [ params.cityHalfW + railM,  params.cityHalfD + railM],
-    [-params.cityHalfW - railM,  params.cityHalfD + railM],
-  ];
-  const segLens = railPts.map((p, i) => {
-    const q = railPts[(i + 1) % 4];
-    return Math.hypot(q[0] - p[0], q[1] - p[1]);
-  });
-  const railTotal = segLens.reduce((a, b) => a + b, 0);
+  // ---- 交通网络（铁路/机场/轮渡）----
+  const net = buildTransport(city, params, wsPrefix);
 
-  // ---- 可变状态（红灯停车）----
-  // carTravels[i] 存储第 i 辆车的 travel time（只有不在红灯时才推进）
-  // 初始化为 phase0 对应的 travel 值
+  // ---- 火车：基于 MST 图行走 ----
+  // 邻接表：节点（区索引）→ [{edgeIdx, otherNode}]
+  const adjList = new Map<number, { edgeIdx: number; otherNode: number }[]>();
+
+  if (net.rails.length > 0 && city.districts.length >= 2) {
+    for (let ei = 0; ei < net.mstEdges.length; ei++) {
+      const { from, to } = net.mstEdges[ei];
+      if (!adjList.has(from)) adjList.set(from, []);
+      if (!adjList.has(to)) adjList.set(to, []);
+      adjList.get(from)!.push({ edgeIdx: ei, otherNode: to });
+      adjList.get(to)!.push({ edgeIdx: ei, otherNode: from });
+    }
+  }
+
+  // 初始化 1-2 列火车
+  const trainStates: TrainState[] = [];
+  const TRAIN_SPEED = 4.5;     // 世界单位/秒
+  const TRAIN_STOP_TIME = 2.5; // 站停时间（秒）
+  const CAR_SPACING = 2.5;     // 车厢间距（弧长）
+  const N_CARS = 3;            // 车头 + 2节车厢
+
+  if (adjList.size >= 2 && net.rails.length > 0) {
+    // 列车 0：从边 0 的 from 节点出发
+    const firstEdge = net.mstEdges[0];
+    trainStates.push({
+      edgeIdx: 0,
+      s: 0,
+      dir: 1,
+      fromNode: firstEdge.from,
+      stopTimer: 0,
+    });
+
+    // 如果有多条边，列车 1：从最后一条边中间出发
+    if (net.rails.length >= 2) {
+      const lastEi = net.rails.length - 1;
+      const lastEdge = net.rails[lastEi];
+      const lastMst = net.mstEdges[lastEi];
+      trainStates.push({
+        edgeIdx: lastEi,
+        s: lastEdge.total * 0.5,
+        dir: -1,
+        fromNode: lastMst.to,
+        stopTimer: 0,
+      });
+    }
+  }
+
+  // 可变状态
   const carTravels: number[] = cars.map(c => c.phase0);
   let lastDrawT = -1;
+
+  // 火车可变状态（按 dt 更新）
+  const trainMutable: TrainState[] = trainStates.map(s => ({ ...s }));
+
+  // 当前帧的火车位置（用于 debugTrainPos）
+  const trainPositions: { x: number; z: number }[] = [];
+
+  /* ----------------------------------------------------------
+     火车节点到达处理：选下一条边
+     ---------------------------------------------------------- */
+
+  function trainArriveNode(
+    train: TrainState,
+    arrivedNode: number,
+  ): void {
+    // 停站
+    train.stopTimer = TRAIN_STOP_TIME;
+
+    const adj = adjList.get(arrivedNode) ?? [];
+    // 找不回头的边（otherNode != fromNode），按 edgeIdx 升序选最小
+    const forward = adj.filter(a => a.otherNode !== train.fromNode);
+
+    if (forward.length > 0) {
+      // 有前进方向
+      const next = forward.reduce((best, cur) => cur.edgeIdx < best.edgeIdx ? cur : best);
+      train.edgeIdx = next.edgeIdx;
+      train.fromNode = arrivedNode;
+      train.dir = 1;
+      train.s = 0;
+    } else {
+      // 叶节点：反向
+      train.fromNode = arrivedNode;
+      train.dir = -train.dir as 1 | -1;
+      // 位置保持在边的端点
+      const edge = net.rails[train.edgeIdx];
+      train.s = train.dir === 1 ? 0 : edge.total;
+    }
+  }
 
   /* ----------------------------------------------------------
      draw
      ---------------------------------------------------------- */
 
   function draw(ctx: CanvasRenderingContext2D, t: number): void {
-    // 推进 carTravels（红灯停车逻辑）
     const dt = lastDrawT < 0 ? 0 : t - lastDrawT;
     lastDrawT = t;
 
+    // ---- 推进 carTravels（红灯停车逻辑）----
     if (dt > 0 && dt < 2) {
       for (let i = 0; i < cars.length; i++) {
         const c = cars[i];
@@ -731,6 +801,34 @@ export function createDynamicLayer(
         }
         if (!halted) {
           carTravels[i] = (carTravels[i] + c.speed * dt) % 1;
+        }
+      }
+    }
+
+    // ---- 推进火车状态 ----
+    if (dt > 0 && dt < 5) {
+      for (const train of trainMutable) {
+        if (train.stopTimer > 0) {
+          train.stopTimer = Math.max(0, train.stopTimer - dt);
+        } else {
+          const edge = net.rails[train.edgeIdx];
+          train.s += train.dir * TRAIN_SPEED * dt;
+
+          if (train.s >= edge.total) {
+            // 到达 to 节点
+            train.s = edge.total;
+            const arrivedNode = train.dir === 1
+              ? net.mstEdges[train.edgeIdx].to
+              : net.mstEdges[train.edgeIdx].from;
+            trainArriveNode(train, arrivedNode);
+          } else if (train.s <= 0) {
+            // 到达 from 节点
+            train.s = 0;
+            const arrivedNode = train.dir === 1
+              ? net.mstEdges[train.edgeIdx].from
+              : net.mstEdges[train.edgeIdx].to;
+            trainArriveNode(train, arrivedNode);
+          }
         }
       }
     }
@@ -774,15 +872,51 @@ export function createDynamicLayer(
       drawCar(ctx, carX, carZ, carAng, c.bodyColor, c.isBus);
     }
 
-    // ---- 火车 ----
-    const s0 = t * 5;
-    for (let i = 0; i < 3; i++) {
-      const [tx, tz, tang] = railAt(s0 - i * 2.4, railPts, segLens, railTotal);
-      // 朝向：看下一点
-      const [tx2, tz2] = railAt(s0 - i * 2.4 + 0.6, railPts, segLens, railTotal);
-      const tAng = Math.atan2(tx2 - tx, tz2 - tz);
-      void tang; // railAt 已返回 ang，这里用上面计算的 tAng
-      drawTrain(ctx, tx, tz, tAng, i === 0, t);
+    // ---- 火车（沿 MST 轨道行走）----
+    // 清空位置缓存
+    trainPositions.length = 0;
+
+    for (let ti = 0; ti < trainMutable.length; ti++) {
+      const train = trainMutable[ti];
+      const edge = net.rails[train.edgeIdx];
+
+      // 记录车头位置（用于 debug）
+      let headRecorded = false;
+
+      for (let j = 0; j < N_CARS; j++) {
+        // 车厢在车头后方
+        const carArcPos = train.s - j * CAR_SPACING * train.dir;
+        const clampedPos = Math.max(0, Math.min(edge.total, carArcPos));
+
+        // 隧道内不绘制
+        if (inTunnel(clampedPos, edge)) continue;
+
+        const sNorm = edge.total > 0 ? clampedPos / edge.total : 0;
+        const [tx, tz, tang] = polyAt(edge, sNorm);
+
+        // 朝向修正（沿行进方向）
+        const lookAheadPos = Math.max(0, Math.min(edge.total, clampedPos + train.dir * 0.6));
+        const lookNorm = edge.total > 0 ? lookAheadPos / edge.total : 0;
+        const [tx2, tz2] = polyAt(edge, lookNorm);
+        const tAng = train.dir === 1
+          ? Math.atan2(tx2 - tx, tz2 - tz)
+          : Math.atan2(tx - tx2, tz - tz2);
+        void tang;
+
+        if (!headRecorded && j === 0) {
+          trainPositions.push({ x: tx, z: tz });
+          headRecorded = true;
+        }
+
+        drawTrain(ctx, tx, tz, tAng, j === 0, t);
+      }
+
+      if (!headRecorded) {
+        // 隧道中的火车，记录一个隐藏位置
+        const sNorm = edge.total > 0 ? train.s / edge.total : 0;
+        const [tx, tz] = polyAt(edge, Math.max(0, Math.min(1, sNorm)));
+        trainPositions.push({ x: tx, z: tz });
+      }
     }
 
     // ---- 帆船 / 快艇 — 按 waterStyle 分派 ----
@@ -812,6 +946,11 @@ export function createDynamicLayer(
         const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
         drawSpeedboat(ctx, sx1 + cosSide * 35, sz1 + sinSide * 35, sbAng);
       }
+
+      // 渡轮（harbor 的 ferry 是到岛屿的）
+      if (net.ferry) {
+        _drawFerry(ctx, t, net);
+      }
     } else if (waterStyle === 'torrent') {
       // 激流：只出小舟（用 drawBoat 缩小）——在窄河上漂
       const { riverWorld: rw2, T: T2 } = params;
@@ -825,8 +964,13 @@ export function createDynamicLayer(
       ctx.translate(-bx3, -bz3);
       drawBoat(ctx, bx3, bz3, boatAng2);
       ctx.restore();
+
+      // 渡轮（torrent 两岸）
+      if (net.ferry) {
+        _drawFerry(ctx, t, net);
+      }
     } else {
-      // river（plains 默认）— 原逻辑
+      // river（plains 默认）— 原逻辑（海巡游船）
       const { riverWorld, T } = params;
       const bv = ((t * 2.2) % (T * 1.2)) - T * 0.6;
       const [bx1, bz1] = riverWorld(bv);
@@ -839,20 +983,147 @@ export function createDynamicLayer(
       const [sx2, sz2] = riverWorld(sv - 1);
       const sbAng = Math.atan2(sx2 - sx1, sz2 - sz1);
       drawSpeedboat(ctx, sx1, sz1, sbAng);
+
+      // 渡轮（river 两岸）
+      if (net.ferry) {
+        _drawFerry(ctx, t, net);
+      }
     }
 
     // ---- 飞机 ----
-    const a = t * 0.1;
-    const R = params.worldR * 1.6;
-    const planeX = Math.cos(a) * R;
-    const planeZ = Math.sin(a) * R;
-    const planeAng = Math.atan2(-Math.sin(a), Math.cos(a));
-    drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
+    if (net.airport) {
+      _drawAirportPlane(ctx, t, net, city, params);
+    } else {
+      // 无机场：保持原来的大圆环绕
+      const a = t * 0.1;
+      const R = params.worldR * 1.6;
+      const planeX = Math.cos(a) * R;
+      const planeZ = Math.sin(a) * R;
+      const planeAng = Math.atan2(-Math.sin(a), Math.cos(a));
+      drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
+    }
 
     // ---- 红绿灯状态点 ----
     for (const light of trafficLights) {
       drawTrafficLightDot(ctx, light, t);
     }
+  }
+
+  /* ----------------------------------------------------------
+     渡轮绘制辅助
+     ---------------------------------------------------------- */
+
+  // 渡轮当前位置缓存（用于 debug）
+  let lastFerryPos: { x: number; z: number } | null = null;
+
+  function _drawFerry(
+    ctx: CanvasRenderingContext2D,
+    t: number,
+    net: ReturnType<typeof buildTransport>,
+  ): void {
+    const ferry = net.ferry!;
+    const [d1, d2] = ferry.docks;
+    const dx = d2.x - d1.x;
+    const dz = d2.z - d1.z;
+    const routeLen = Math.hypot(dx, dz);
+    if (routeLen < 0.1) return;
+
+    // period = 往返各 routeLen/3 秒 + 各端停 2 秒
+    const travelTime = routeLen / 3;
+    const period = travelTime * 2 + 4;
+
+    const p = (t % period) / period;  // 0..1 in full period
+
+    let fx: number, fz: number, fAng: number;
+
+    // 将 period 分成 4 段：出发停留、前进、到达停留、返回
+    const stopFrac = 2 / period;          // 两端各停 2 秒对应的 fraction
+    const moveFrac = travelTime / period;  // 移动对应的 fraction
+
+    // [0, stopFrac): dock1 停留
+    // [stopFrac, stopFrac+moveFrac): dock1→dock2
+    // [stopFrac+moveFrac, 2*stopFrac+moveFrac): dock2 停留
+    // [2*stopFrac+moveFrac, 1): dock2→dock1
+
+    if (p < stopFrac) {
+      fx = d1.x; fz = d1.z;
+      fAng = Math.atan2(dx, dz);
+    } else if (p < stopFrac + moveFrac) {
+      const moveP = (p - stopFrac) / moveFrac;
+      fx = d1.x + dx * moveP;
+      fz = d1.z + dz * moveP;
+      fAng = Math.atan2(dx, dz);
+    } else if (p < 2 * stopFrac + moveFrac) {
+      fx = d2.x; fz = d2.z;
+      fAng = Math.atan2(-dx, -dz);
+    } else {
+      const moveP = (p - (2 * stopFrac + moveFrac)) / moveFrac;
+      fx = d2.x - dx * moveP;
+      fz = d2.z - dz * moveP;
+      fAng = Math.atan2(-dx, -dz);
+    }
+
+    lastFerryPos = { x: fx, z: fz };
+    drawBoat(ctx, fx, fz, fAng);
+  }
+
+  /* ----------------------------------------------------------
+     机场飞机绘制辅助
+     ---------------------------------------------------------- */
+
+  function _drawAirportPlane(
+    ctx: CanvasRenderingContext2D,
+    t: number,
+    net: ReturnType<typeof buildTransport>,
+    city: CityModel,
+    params: WorldParams,
+  ): void {
+    const airport = net.airport!;
+
+    // 目标区（用种子确定性选择）
+    const targetDistrict = city.districts.length > 0
+      ? city.districts[0]
+      : null;
+    const targetX = targetDistrict ? targetDistrict.x + targetDistrict.width / 2 : 0;
+    const targetZ = targetDistrict ? targetDistrict.z + targetDistrict.depth / 2 : 0;
+
+    // 飞行周期 40 秒
+    const period = 40;
+    const p = (t % period) / period;  // 0..1
+
+    let planeX: number, planeZ: number, planeAng: number;
+
+    if (p < 0.1) {
+      // 起飞阶段：在机场附近
+      const takeoffP = p / 0.1;
+      const runwayX = airport.x + Math.cos(airport.ang) * airport.len * 0.5 * takeoffP;
+      const runwayZ = airport.z + Math.sin(airport.ang) * airport.len * 0.5 * takeoffP;
+      planeX = runwayX;
+      planeZ = runwayZ;
+      planeAng = airport.ang;
+    } else if (p < 0.9) {
+      // 巡航：绕目标区转圈
+      const circleP = (p - 0.1) / 0.8;
+      const circleAng = circleP * Math.PI * 2;
+      const radius = 15;
+      planeX = targetX + Math.cos(circleAng) * radius;
+      planeZ = targetZ + Math.sin(circleAng) * radius;
+      planeAng = circleAng + Math.PI / 2;
+    } else {
+      // 返航阶段：飞回机场
+      const returnP = (p - 0.9) / 0.1;
+      const prevCircleAng = Math.PI * 2;
+      const radius = 15;
+      const fromX = targetX + Math.cos(prevCircleAng) * radius;
+      const fromZ = targetZ + Math.sin(prevCircleAng) * radius;
+      planeX = fromX + (airport.x - fromX) * returnP;
+      planeZ = fromZ + (airport.z - fromZ) * returnP;
+      const toX = airport.x - fromX;
+      const toZ = airport.z - fromZ;
+      planeAng = Math.atan2(toX, toZ);
+    }
+
+    drawPlane(ctx, planeX, planeZ, planeAng, t, params.worldR);
   }
 
   /* ----------------------------------------------------------
@@ -865,11 +1136,22 @@ export function createDynamicLayer(
     return phase < 0.5 ? phase * 2 : (1 - phase) * 2;
   }
 
+  function debugTrainPos(i: number): { x: number; z: number } | null {
+    if (i < 0 || i >= trainPositions.length) return null;
+    return trainPositions[i];
+  }
+
+  function debugFerryPos(): { x: number; z: number } | null {
+    return lastFerryPos;
+  }
+
   return {
     draw,
     hitables: () => [],
     citizenCount: () => nV,
     debugCarS,
     debugCitizenKinds: () => citizens.map(c => c.kind),
+    debugTrainPos,
+    debugFerryPos,
   };
 }

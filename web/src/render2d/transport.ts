@@ -42,11 +42,17 @@ export interface FerryRoute {
   docks: { x: number; z: number; districtDir: string }[];  // 两端渡口
 }
 
+export interface MSTEdgePublic {
+  from: number;  // district index
+  to: number;    // district index
+}
+
 export interface TransportNet {
   rails: RailEdge[];
   stations: StationPos[];
   airport: Airport | null;
   ferry: FerryRoute | null;
+  mstEdges: MSTEdgePublic[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -384,27 +390,33 @@ function buildFerry(
     return { route, docks: [dock1, dock2] };
   }
 
-  // river / torrent: 找 riverU 坐标符号相反的两个区
-  const { cosR, sinR } = params;
+  // river / torrent: 找相对河心线 u_signed 符号相反的两个区
+  // u_signed = (x*cosR + z*sinR) - riverU(-x*sinR + z*cosR)
+  const { cosR, sinR, riverU: riverUFn } = params;
+
+  function uSigned(cx: number, cz: number): number {
+    const v = -cx * sinR + cz * cosR;
+    return cx * cosR + cz * sinR - riverUFn(v);
+  }
 
   let distA: District | null = null;
   let distB: District | null = null;
-  let riverUA = 0;
-  let riverUB = 0;
+  let uSignedA = 0;
+  let uSignedB = 0;
 
   outer:
   for (let i = 0; i < city.districts.length; i++) {
     const [cxA, czA] = districtCenter(city.districts[i]);
-    const uA = cxA * cosR + czA * sinR;
+    const uA = uSigned(cxA, czA);
     for (let j = i + 1; j < city.districts.length; j++) {
       const [cxB, czB] = districtCenter(city.districts[j]);
-      const uB = cxB * cosR + czB * sinR;
-      // 符号相反
+      const uB = uSigned(cxB, czB);
+      // 符号相反 → 两区在河的不同侧
       if (uA * uB < 0) {
         distA = city.districts[i];
         distB = city.districts[j];
-        riverUA = uA;
-        riverUB = uB;
+        uSignedA = uA;
+        uSignedB = uB;
         break outer;
       }
     }
@@ -412,23 +424,36 @@ function buildFerry(
 
   if (!distA || !distB) return null;
 
-  // 朝向河的 polygon 顶点：riverU 值越小（负号方向越靠近河）
-  function closestVertToRiver(d: District, riverU: number): [number, number] {
+  // 朝向河的 polygon 顶点：|u_signed| 最小且与区中心同侧
+  function closestVertToRiver(d: District, districtUSigned: number): [number, number] {
     let bestV: [number, number] = d.polygon[0];
-    let bestU = Infinity;
-    const sign = riverU > 0 ? -1 : 1;  // 靠近 0 的方向
+    let bestAbsU = Infinity;
     for (const v of d.polygon) {
-      const u = (v[0] * cosR + v[1] * sinR) * sign;
-      if (u < bestU) {
-        bestU = u;
-        bestV = [v[0], v[1]];
+      const vertU = uSigned(v[0], v[1]);
+      // 只考虑与区中心同侧的顶点（符号相同），取 |u_signed| 最小的（最靠近河）
+      if (vertU * districtUSigned > 0) {
+        const absU = Math.abs(vertU);
+        if (absU < bestAbsU) {
+          bestAbsU = absU;
+          bestV = [v[0], v[1]];
+        }
+      }
+    }
+    // 如果没有同侧顶点（多边形较小），退回到绝对最近的顶点
+    if (bestAbsU === Infinity) {
+      for (const v of d.polygon) {
+        const absU = Math.abs(uSigned(v[0], v[1]));
+        if (absU < bestAbsU) {
+          bestAbsU = absU;
+          bestV = [v[0], v[1]];
+        }
       }
     }
     return bestV;
   }
 
-  const va = closestVertToRiver(distA, riverUA);
-  const vb = closestVertToRiver(distB, riverUB);
+  const va = closestVertToRiver(distA, uSignedA);
+  const vb = closestVertToRiver(distB, uSignedB);
 
   const dock1 = { x: va[0], z: va[1], districtDir: distA.dir };
   const dock2 = { x: vb[0], z: vb[1], districtDir: distB.dir };
@@ -518,5 +543,5 @@ export function buildTransport(
   // 轮渡
   const ferry = buildFerry(city, params);
 
-  return { rails, stations, airport, ferry };
+  return { rails, stations, airport, ferry, mstEdges };
 }
