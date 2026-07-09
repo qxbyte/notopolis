@@ -1734,6 +1734,18 @@ function paintTransport(
     wobblyRect(ctx, apRng, -len / 2, -hw, len, width, 0.5);
     ctx.stroke();
 
+    // 跑道边缘白线
+    (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(-len / 2, -hw);
+    ctx.lineTo(len / 2, -hw);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-len / 2, hw);
+    ctx.lineTo(len / 2, hw);
+    ctx.stroke();
+
     // 2. 白中线虚线
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
@@ -1754,7 +1766,7 @@ function paintTransport(
     hatchRect(ctx, apRng, len / 2 - 5, -hw, 5, width, 3, PAPER.inkFaded);
 
     // 5. 停机坪（taxiway + apron 矩形，局部坐标）
-    const apronW = 14, apronD = 10;
+    const apronW = 18, apronD = 14;
     const { dx: apDx, dz: apDz } = airport.apron;
     (ctx as unknown as Record<string, unknown>).fillStyle = '#ccc8bc';
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.inkFaded;
@@ -1842,15 +1854,28 @@ function paintTransport(
     (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.paper;
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.2;
-    wobblyRect(ctx, apRng, twDx - 1, twDz - 5, 2, 5, 0.3);
+    wobblyRect(ctx, apRng, twDx - 1, twDz - 8, 2, 8, 0.3);
     ctx.fill();
-    wobblyRect(ctx, apRng, twDx - 1, twDz - 5, 2, 5, 0.3);
+    wobblyRect(ctx, apRng, twDx - 1, twDz - 8, 2, 8, 0.3);
     ctx.stroke();
     // 控制室（小方块圆顶）
     (ctx as unknown as Record<string, unknown>).fillStyle = '#c8dce0';
-    wobblyRect(ctx, apRng, twDx - 1.5, twDz - 6.5, 3, 1.5, 0.2);
+    wobblyRect(ctx, apRng, twDx - 1.5, twDz - 9.5, 3, 1.5, 0.2);
     ctx.fill();
     ctx.stroke();
+    // 塔顶旋转灯光芒（静态 6 根）
+    const beaconX = twDx, beaconZ = twDz - 9.5;
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#f0e040';
+    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+    for (let bi = 0; bi < 6; bi++) {
+      const ba = (bi / 6) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(beaconX + Math.cos(ba) * 0.4, beaconZ + Math.sin(ba) * 0.4);
+      ctx.lineTo(beaconX + Math.cos(ba) * 3.0, beaconZ + Math.sin(ba) * 3.0);
+      ctx.stroke();
+    }
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
     // 10. 风向袋（斜杆 + 小三角旗）
     const wsX = len / 2 - 8, wsZ = hw + 3;  // 跑道侧方
@@ -1957,26 +1982,32 @@ function paintZoo(
   theme: string,
 ): void {
   const isSnow = theme === 'snow';
-  const fenceR = 10 + rng() * 4; // 10-14
+  const fenceR = 12 + rng() * 4; // 12-16（略大）
 
-  // 围栏圈（wobbly 闭合圆，wobble 大 → 不规则）
+  // 外圈围栏（加粗）
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.30;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.90;
   wobblyCircle(ctx, rng, cx, cz, fenceR, 0.18);
+  ctx.stroke();
+
+  // 内圈围栏（略细、略小）
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
+  wobblyCircle(ctx, rng, cx, cz, fenceR - 0.8, 0.15);
   ctx.stroke();
   (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
 
-  // 围栏短竖线（栏杆，每 2 单位一根，沿圆弧均匀采样）
-  const railCount = Math.floor(fenceR * Math.PI); // ~周长/2
+  // 围栏短竖线（栏杆，每 1.5 单位一根，更密）
+  const railCount = Math.floor(fenceR * Math.PI * 2 / 1.5);
   (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
   for (let ri = 0; ri < railCount; ri++) {
     const ang = (ri / railCount) * Math.PI * 2;
     const rx = cx + Math.cos(ang) * fenceR;
     const rz = cz + Math.sin(ang) * fenceR;
-    const outX = cx + Math.cos(ang) * (fenceR + 1.0);
-    const outZ = cz + Math.sin(ang) * (fenceR + 1.0);
+    const outX = cx + Math.cos(ang) * (fenceR + 1.2);
+    const outZ = cz + Math.sin(ang) * (fenceR + 1.2);
     ctx.beginPath();
     ctx.moveTo(rx, rz);
     ctx.lineTo(outX, outZ);
@@ -1993,6 +2024,45 @@ function paintZoo(
   wobblyRect(ctx, rng, cx - 1.0, gateZ, 2.0, 1.5, 0.3);
   ctx.stroke();
 
+  // 旗杆 + 橙色三角旗
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.15;
+  ctx.beginPath();
+  ctx.moveTo(cx, gateZ + 1.5);
+  ctx.lineTo(cx, gateZ + 4.5);
+  ctx.stroke();
+  (ctx as unknown as Record<string, unknown>).fillStyle = '#e06020';
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.moveTo(cx, gateZ + 4.5);
+  ctx.lineTo(cx + 2.5, gateZ + 3.8);
+  ctx.lineTo(cx, gateZ + 3.0);
+  ctx.closePath();
+  ctx.fill();
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+
+  // 访客（2 个简化市民，沿围栏内侧）
+  (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+  for (let vi = 0; vi < 2; vi++) {
+    const va = (vi / 2) * Math.PI * 2 + rng() * 0.5;
+    const vr = fenceR * 0.75;
+    const vx = cx + Math.cos(va) * vr;
+    const vz = cz + Math.sin(va) * vr;
+    // 头
+    wobblyCircle(ctx, rng, vx, vz - 0.8, 0.25, 0.05);
+    ctx.stroke();
+    // 身体 + 腿
+    ctx.beginPath();
+    ctx.moveTo(vx, vz - 0.5);
+    ctx.lineTo(vx, vz + 0.4);
+    ctx.moveTo(vx, vz + 0.4);
+    ctx.lineTo(vx - 0.25, vz + 0.9);
+    ctx.moveTo(vx, vz + 0.4);
+    ctx.lineTo(vx + 0.25, vz + 0.9);
+    ctx.stroke();
+  }
+
   // 2-3 个小圈舍
   const enclosureCount = 2 + Math.floor(rng() * 2);
   for (let ei = 0; ei < enclosureCount; ei++) {
@@ -2008,7 +2078,7 @@ function paintZoo(
     wobblyCircle(ctx, rng, ex, ez, encR, 0.1);
     ctx.stroke();
 
-    // 动物涂鸦（2-3 笔极简）
+    // 动物涂鸦（体型 ×2）
     const animalCount = 2 + Math.floor(rng() * 2);
     for (let ai = 0; ai < animalCount; ai++) {
       const ax2 = ex + (rng() - 0.5) * encR * 1.2;
@@ -2018,80 +2088,79 @@ function paintZoo(
 
       if (isSnow) {
         if (ai % 2 === 0) {
-          // 驯鹿（reindeer）: oval body + forked antlers
-          wobblyCircle(ctx, rng, ax2, az2, 0.8, 0.15);
+          // 驯鹿（体型 ×2）
+          wobblyCircle(ctx, rng, ax2, az2, 1.6, 0.15);
           ctx.stroke();
           ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 0.8);
-          ctx.lineTo(ax2 - 0.6, az2 - 1.6);
-          ctx.moveTo(ax2 - 0.3, az2 - 1.2);
-          ctx.lineTo(ax2 - 0.8, az2 - 1.0);
-          ctx.moveTo(ax2, az2 - 0.8);
-          ctx.lineTo(ax2 + 0.6, az2 - 1.6);
-          ctx.moveTo(ax2 + 0.3, az2 - 1.2);
-          ctx.lineTo(ax2 + 0.8, az2 - 1.0);
+          ctx.moveTo(ax2, az2 - 1.6);
+          ctx.lineTo(ax2 - 1.2, az2 - 3.2);
+          ctx.moveTo(ax2 - 0.6, az2 - 2.4);
+          ctx.lineTo(ax2 - 1.6, az2 - 2.0);
+          ctx.moveTo(ax2, az2 - 1.6);
+          ctx.lineTo(ax2 + 1.2, az2 - 3.2);
+          ctx.moveTo(ax2 + 0.6, az2 - 2.4);
+          ctx.lineTo(ax2 + 1.6, az2 - 2.0);
           ctx.stroke();
         } else {
-          // 雪枭（snow-owl）: circle body + two triangle ears + two dot eyes
-          wobblyCircle(ctx, rng, ax2, az2, 0.65, 0.12);
+          // 雪枭（体型 ×2）
+          wobblyCircle(ctx, rng, ax2, az2, 1.3, 0.12);
           ctx.stroke();
           ctx.beginPath();
-          ctx.moveTo(ax2 - 0.3, az2 - 0.65);
-          ctx.lineTo(ax2 - 0.55, az2 - 1.1);
-          ctx.lineTo(ax2 - 0.05, az2 - 0.95);
+          ctx.moveTo(ax2 - 0.6, az2 - 1.3);
+          ctx.lineTo(ax2 - 1.1, az2 - 2.2);
+          ctx.lineTo(ax2 - 0.1, az2 - 1.9);
           ctx.closePath();
           ctx.stroke();
           ctx.beginPath();
-          ctx.moveTo(ax2 + 0.3, az2 - 0.65);
-          ctx.lineTo(ax2 + 0.55, az2 - 1.1);
-          ctx.lineTo(ax2 + 0.05, az2 - 0.95);
+          ctx.moveTo(ax2 + 0.6, az2 - 1.3);
+          ctx.lineTo(ax2 + 1.1, az2 - 2.2);
+          ctx.lineTo(ax2 + 0.1, az2 - 1.9);
           ctx.closePath();
           ctx.stroke();
           (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.ink;
-          ctx.fillRect(ax2 - 0.2, az2 - 0.25, 0.15, 0.15);
-          ctx.fillRect(ax2 + 0.05, az2 - 0.25, 0.15, 0.15);
+          ctx.fillRect(ax2 - 0.4, az2 - 0.5, 0.3, 0.3);
+          ctx.fillRect(ax2 + 0.1, az2 - 0.5, 0.3, 0.3);
         }
       } else {
-        // 轮换：长颈鹿/象/鹿 by index
+        // 轮换：长颈鹿/象/鹿 by index（体型 ×2）
         const kind = ai % 3;
         if (kind === 0) {
-          // 长颈鹿：长脖子竖线 + 小圆头
+          // 长颈鹿（脖颈 ×2，头 ×2）
           ctx.beginPath();
           ctx.moveTo(ax2, az2);
-          ctx.lineTo(ax2 + 0.3, az2 - 1.8); // 脖颈斜线
+          ctx.lineTo(ax2 + 0.6, az2 - 3.6);
           ctx.stroke();
-          wobblyCircle(ctx, rng, ax2 + 0.3, az2 - 2.0, 0.35, 0.12);
+          wobblyCircle(ctx, rng, ax2 + 0.6, az2 - 4.0, 0.7, 0.12);
           ctx.stroke();
-          // 斑点（2个小方点）
-          ctx.fillRect(ax2 - 0.2, az2 - 0.5, 0.25, 0.25);
-          ctx.fillRect(ax2 + 0.1, az2 - 0.8, 0.2, 0.2);
+          // 斑点
+          ctx.fillRect(ax2 - 0.4, az2 - 1.0, 0.5, 0.5);
+          ctx.fillRect(ax2 + 0.2, az2 - 1.6, 0.4, 0.4);
         } else if (kind === 1) {
-          // 象：大耳朵圆身
-          wobblyCircle(ctx, rng, ax2, az2, 0.75, 0.12); // 身体
+          // 象（身 ×2，耳 ×2）
+          wobblyCircle(ctx, rng, ax2, az2, 1.5, 0.12);
           ctx.stroke();
-          // 大耳朵（左侧半圆弧）
           ctx.beginPath();
-          ctx.arc(ax2 - 0.75, az2, 0.5, -Math.PI / 2, Math.PI / 2);
+          ctx.arc(ax2 - 1.5, az2, 1.0, -Math.PI / 2, Math.PI / 2);
           ctx.stroke();
         } else {
-          // 鹿：分叉角
+          // 鹿（颈 ×2，角 ×2）
           ctx.beginPath();
           ctx.moveTo(ax2, az2);
-          ctx.lineTo(ax2, az2 - 1.2); // 脖颈
+          ctx.lineTo(ax2, az2 - 2.4);
           ctx.stroke();
           // 左分叉
           ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 1.0);
-          ctx.lineTo(ax2 - 0.5, az2 - 1.5);
-          ctx.moveTo(ax2 - 0.3, az2 - 1.2);
-          ctx.lineTo(ax2 - 0.7, az2 - 1.1);
+          ctx.moveTo(ax2, az2 - 2.0);
+          ctx.lineTo(ax2 - 1.0, az2 - 3.0);
+          ctx.moveTo(ax2 - 0.6, az2 - 2.4);
+          ctx.lineTo(ax2 - 1.4, az2 - 2.2);
           ctx.stroke();
           // 右分叉
           ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 1.0);
-          ctx.lineTo(ax2 + 0.5, az2 - 1.5);
-          ctx.moveTo(ax2 + 0.3, az2 - 1.2);
-          ctx.lineTo(ax2 + 0.7, az2 - 1.1);
+          ctx.moveTo(ax2, az2 - 2.0);
+          ctx.lineTo(ax2 + 1.0, az2 - 3.0);
+          ctx.moveTo(ax2 + 0.6, az2 - 2.4);
+          ctx.lineTo(ax2 + 1.4, az2 - 2.2);
           ctx.stroke();
         }
       }
@@ -2229,6 +2298,7 @@ function paintWilderness(
   params: WorldParams,
   transport: TransportNet,
   wsPrefix: string,
+  poisOut?: CityPOI[],
 ): void {
   const rng = rng0(wsPrefix + ':wild');
   const { T, riverDist, RIVER_W } = params;
@@ -2407,6 +2477,7 @@ function paintWilderness(
     if (candidates.length === 0) break;
     const candidateIdx = (meadowCount + forestPatchCount + pi) % candidates.length;
     const [cx, cz] = candidates[candidateIdx];
+    if (poisOut) poisOut.push({ x: cx, z: cz, r: 14, kind: 'park' });
 
     // 草地底
     const grassR = 12 + rng() * 6;
@@ -2454,6 +2525,7 @@ function paintWilderness(
   for (let zi = 0; zi < zooCount; zi++) {
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zi) % candidates.length;
     const [zx, zz] = candidates[candidateIdx];
+    if (poisOut) poisOut.push({ x: zx, z: zz, r: 10, kind: 'zoo' });
     paintZoo(ctx, rng, zx, zz, theme);
   }
 
@@ -2465,6 +2537,7 @@ function paintWilderness(
   for (let wi2 = 0; wi2 < wetlandCount; wi2++) {
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zooCount + wi2) % candidates.length;
     const [wx2, wz2] = candidates[candidateIdx];
+    if (poisOut) poisOut.push({ x: wx2, z: wz2, r: 12, kind: 'wetland' });
     paintWetland(ctx, rng, wx2, wz2, theme, isHarbor);
   }
 
@@ -2475,8 +2548,17 @@ function paintWilderness(
 /* 主函数（重构）                                                        */
 /* ------------------------------------------------------------------ */
 
+/** 城市兴趣点（公园/动物园/湿地）坐标，供动态层市民动画使用 */
+export interface CityPOI {
+  x: number;
+  z: number;
+  r: number;
+  kind: 'park' | 'zoo' | 'wetland';
+}
+
 export interface CityPainter {
   hitItems: HitItem[];
+  pois: CityPOI[];
   drawStatic(ctx: CanvasRenderingContext2D): void;
 }
 
@@ -2519,6 +2601,9 @@ export function buildCityPainter(
       });
     }
   }
+
+  const pois: CityPOI[] = [];
+  let poisCollected = false;
 
   // drawStatic：可重复调用，内部自行创建所有 rng
   // ctx 必须已设置世界坐标变换（世界单位 → 像素）
@@ -2595,7 +2680,9 @@ export function buildCityPainter(
     paintParks(ctx, city.districts, wsPrefix);
 
     // 层 6.5 — 旷野填充
-    paintWilderness(ctx, city, params, transport, wsPrefix);
+    const poisBuf = poisCollected ? undefined : pois;
+    paintWilderness(ctx, city, params, transport, wsPrefix, poisBuf);
+    if (!poisCollected) poisCollected = true;
 
     // 层 7 — 建筑
     paintBuildings(ctx, city.districts, wsPrefix);
@@ -2607,7 +2694,7 @@ export function buildCityPainter(
     paintExtras(ctx, params, city, wsPrefix, minX, minZ, maxX, maxZ);
   }
 
-  return { hitItems, drawStatic };
+  return { hitItems, pois, drawStatic };
 }
 
 /**

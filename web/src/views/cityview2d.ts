@@ -6,7 +6,7 @@
 import { worldParams } from '../world/params';
 import { createWorldCanvas } from '../render2d/worldcanvas';
 import { paintCity, buildCityPainter } from '../render2d/citypainter';
-import type { CityPainter } from '../render2d/citypainter';
+import type { CityPainter, CityPOI } from '../render2d/citypainter';
 import { createDynamicLayer } from '../render2d/dynamic';
 import { createCamera2D } from '../render2d/camera2d';
 import { hitTest } from '../render2d/hit';
@@ -96,28 +96,11 @@ export function showCity2D(
   world.paint((ctx) => painter.drawStatic(ctx));
   const paintMs = Math.round((performance.now() - paintStart) * 10) / 10;
 
-  // ---- 6. 公园列表（供动态层）----
-  const parks = city.districts
-    .filter((d: District) => d.isInbox || d.buildings.length < 3)
-    .map((d: District) => {
-      const poly = d.polygon;
-      let bboxMinX = Infinity, bboxMinZ = Infinity, bboxMaxX = -Infinity, bboxMaxZ = -Infinity;
-      for (const [px, pz] of poly) {
-        bboxMinX = Math.min(bboxMinX, px);
-        bboxMinZ = Math.min(bboxMinZ, pz);
-        bboxMaxX = Math.max(bboxMaxX, px);
-        bboxMaxZ = Math.max(bboxMaxZ, pz);
-      }
-      const cx = (bboxMinX + bboxMaxX) / 2;
-      const cz = (bboxMinZ + bboxMaxZ) / 2;
-      const dx = bboxMaxX - bboxMinX;
-      const dz = bboxMaxZ - bboxMinZ;
-      const r = Math.sqrt(dx * dx + dz * dz) / 2;
-      return { x: cx, z: cz, r };
-    });
+  // ---- 6. 公园列表（供动态层）——从 painter.pois 获取（精确坐标）----
+  // 注意：painter.pois 在 world.paint（第一次 drawStatic）后已填充
 
   // ---- 7. 动态层 ----
-  const dynLayer = createDynamicLayer(city, params, wsPrefix, parks);
+  const dynLayer = createDynamicLayer(city, params, wsPrefix, painter.pois);
 
   // ---- 8. 全屏 canvas ----
   const dpr = window.devicePixelRatio || 1;
