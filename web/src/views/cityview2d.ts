@@ -76,7 +76,14 @@ export function showCity2D(
 
   // ---- 3. 世界参数 ----
   const wsPrefix = 'world:' + vault.path;
-  const params = worldParams(vault.path, cityHalfW, cityHalfD, worldR, T, city.theme);
+  // 将各 district 的 bbox 中心+半径传入，供运河避让聚落使用
+  const districtSettlements = city.districts.map((d: District) => {
+    const cx = d.x + d.width / 2;
+    const cz = d.z + d.depth / 2;
+    const r = Math.max(d.width, d.depth) / 2;
+    return { x: cx, z: cz, r };
+  });
+  const params = worldParams(vault.path, cityHalfW, cityHalfD, worldR, T, city.theme, districtSettlements);
 
   // ---- 4. 离屏世界画布（8 ppu）----
   const world = createWorldCanvas(expandedBounds, 8);

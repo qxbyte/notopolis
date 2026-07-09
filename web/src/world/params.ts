@@ -72,6 +72,7 @@ export function worldParams(
   worldR: number,
   T: number,
   theme: string = 'plains',
+  settlements: { x: number; z: number; r: number }[] = [],
 ): WorldParams {
   // ========== 世界种子：一切地貌参数由 vault 决定，不同仓库不同世界 ==========
   const wrng = rng0('world:' + vaultPath);
@@ -101,24 +102,101 @@ export function worldParams(
   const MA = RA + Math.PI * (0.55 + wrng() * 0.9);
   const cosM = Math.cos(MA), sinM = Math.sin(MA);
 
-  // 支流运河：从大河随机位置分出，穿过城区，汇入对侧尽头湖
+  // 支流运河：从大河随机位置分出，作为短支流延伸至附近，避开聚落
   const canalPts: [number, number][] = [];
   {
     const v0 = (wrng() - 0.5) * maxHalf * 1.4;
     const P0 = riverWorld(v0);
-    const dirC = Math.atan2(-P0[1], -P0[0]); // 指向城心
-    const perp = dirC + Math.PI / 2;
-    const canalLen = Math.hypot(P0[0], P0[1]) + maxHalf * 1.35 + 8 + wrng() * 12;
-    const a1 = 3.5 + wrng() * 3, k1 = 1.6 + wrng() * 1.4, ph = wrng() * Math.PI * 2;
-    const N = 30;
-    for (let i = 0; i <= N; i++) {
-      const u = i / N;
-      const d = canalLen * u;
-      const off = Math.sin(u * Math.PI * k1 + ph) * a1 * Math.sin(Math.PI * Math.min(1, u * 1.2));
-      canalPts.push([
-        P0[0] + Math.cos(dirC) * d + Math.cos(perp) * off,
-        P0[1] + Math.sin(dirC) * d + Math.sin(perp) * off,
-      ]);
+
+    // 辅助：检查一个点与所有聚落的最小 gap（dist - r）
+    function minSettlementGap(px: number, pz: number): number {
+      if (settlements.length === 0) return Infinity;
+      let minGap = Infinity;
+      for (const s of settlements) {
+        const gap = Math.hypot(px - s.x, pz - s.z) - s.r;
+        if (gap < minGap) minGap = gap;
+      }
+      return minGap;
+    }
+
+    // 候选终点生成：在河附近选离河 60–140 单位、且与所有聚落 gap ≥ 10 的随机点
+    // 取 40 候选中 gap 最大者；消耗 wrng 以保证确定性序列不断裂
+    let bestEndX = 0, bestEndZ = 0, bestGap = -Infinity;
+    const CANDIDATES = 40;
+    for (let ci = 0; ci < CANDIDATES; ci++) {
+      const ang = wrng() * Math.PI * 2;
+      const dist = 60 + wrng() * 80; // 60–140 单位
+      const ex = P0[0] + Math.cos(ang) * dist;
+      const ez = P0[1] + Math.sin(ang) * dist;
+      const gap = minSettlementGap(ex, ez);
+      if (gap > bestGap) {
+        bestGap = gap;
+        bestEndX = ex;
+        bestEndZ = ez;
+      }
+    }
+
+    const ph = wrng() * Math.PI * 2;
+
+    // 生成运河路径（最多 5 轮重试以避让聚落侵入）
+    const MAX_RETRY = 5;
+    let accepted = false;
+    for (let retry = 0; retry < MAX_RETRY && !accepted; retry++) {
+      if (retry > 0) {
+        // 重新抽终点（继续消耗 wrng）
+        let retryBestX = bestEndX, retryBestZ = bestEndZ, retryBestGap = -Infinity;
+        for (let ci = 0; ci < CANDIDATES; ci++) {
+          const ang = wrng() * Math.PI * 2;
+          const dist = 60 + wrng() * 80;
+          const ex = P0[0] + Math.cos(ang) * dist;
+          const ez = P0[1] + Math.sin(ang) * dist;
+          const gap = minSettlementGap(ex, ez);
+          if (gap > retryBestGap) {
+            retryBestGap = gap;
+            retryBestX = ex;
+            retryBestZ = ez;
+          }
+        }
+        bestEndX = retryBestX;
+        bestEndZ = retryBestZ;
+      }
+
+      const canalLen = Math.hypot(bestEndX - P0[0], bestEndZ - P0[1]);
+      const dirC = Math.atan2(bestEndZ - P0[1], bestEndX - P0[0]);
+      const perp = dirC + Math.PI / 2;
+
+      // 振幅与波数与长度成比例
+      const a1 = Math.max(4, Math.min(18, canalLen * 0.10));
+      const k1 = Math.max(1.6, canalLen / 70);
+      const N = Math.max(20, Math.ceil(canalLen / 8));
+
+      const pts: [number, number][] = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
+        const d = canalLen * u;
+        const off = Math.sin(u * Math.PI * k1 + ph) * a1 * Math.sin(Math.PI * Math.min(1, u * 1.2));
+        pts.push([
+          P0[0] + Math.cos(dirC) * d + Math.cos(perp) * off,
+          P0[1] + Math.sin(dirC) * d + Math.sin(perp) * off,
+        ]);
+      }
+
+      // 检查路径采样点是否侵入任何聚落（gap < 2）
+      let invaded = false;
+      if (settlements.length > 0) {
+        for (const pt of pts) {
+          if (minSettlementGap(pt[0], pt[1]) < 2) {
+            invaded = true;
+            break;
+          }
+        }
+      }
+
+      if (!invaded || retry === MAX_RETRY - 1) {
+        // 接受这条路径
+        canalPts.push(...pts);
+        accepted = true;
+      }
     }
   }
 
