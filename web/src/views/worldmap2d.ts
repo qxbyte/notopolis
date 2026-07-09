@@ -237,7 +237,7 @@ export function showWorldMap2D(
     manageBtn = document.createElement('button');
     manageBtn.id = 'manage-btn';
     manageBtn.textContent = '⚙ 仓库管理';
-    manageBtn.style.cssText = 'position:absolute;top:12px;right:14px;z-index:10;background:rgba(30,26,46,0.85);border:1px solid #4a4264;color:#d9c58a;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;';
+    // 样式统一走 style.css 的 #manage-btn（纸片按钮）
     manageBtn.addEventListener('click', onManageBtnClick);
     container.appendChild(manageBtn);
   }
@@ -380,7 +380,7 @@ export function showWorldMap2D(
       ctx.translate(pos.x, pos.z);
       ctx.scale(1 / zoom, 1 / zoom);
       ctx.fillStyle = PAPER.ink;
-      ctx.font = `bold ${12}px sans-serif`;
+      ctx.font = `13px 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', cursive`;
       ctx.textAlign = 'center';
       // 调整为印章下方
       const stampH = hitRadius(vaults[i].tier) + 6;

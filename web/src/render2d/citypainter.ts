@@ -416,7 +416,7 @@ function paintDistricts(
       const cz = (bboxMinZ + bboxMaxZ) / 2;
 
       // 描边（paper 色，模拟纸底）
-      (ctx as unknown as Record<string, unknown>).font = `italic ${fontSize}px cursive`;
+      (ctx as unknown as Record<string, unknown>).font = `${fontSize}px 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', cursive`;
       (ctx as unknown as Record<string, unknown>).textAlign = 'center';
       (ctx as unknown as Record<string, unknown>).textBaseline = 'middle';
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.paper;

@@ -1,49 +1,165 @@
-/* 从原型 prototype/public/index.html 行 8-25 精确迁移 */
+/* ==========================================================================
+   Notopolis UI —— 「地图集扉页 + 图书馆索引卡」
+   设计原则：UI 是地图的延伸。调色板取自画布世界（PAPER 常量 / 屋顶印章红），
+   签名元素：不规则 border-radius 模拟手绘抖动墨线框 + 印章式徽标。
+   ========================================================================== */
 
-#hud { position: fixed; top: 12px; left: 14px; color: #3a4450; pointer-events: none; text-shadow: 0 1px 2px rgba(255,255,255,0.5); }
-#hud h1 { margin: 0; font-size: 18px; letter-spacing: 2px; }
-#hud .sub { font-size: 12px; opacity: 0.8; margin-top: 2px; }
-#label { position: fixed; padding: 3px 9px; background: rgba(30,36,46,0.85); color: #f0e8d8;
-         font-size: 12px; border-radius: 4px; pointer-events: none; display: none; white-space: nowrap; z-index: 5; }
-#card { position: fixed; top: 14px; right: 14px; width: 280px; background: rgba(250,247,240,0.96);
-        border: 1px solid #c9bfa8; border-radius: 10px; padding: 14px 16px; display: none;
-        box-shadow: 0 6px 24px rgba(40,40,30,0.25); color: #3a3428; z-index: 6; }
-#card h3 { margin: 0 0 6px; font-size: 15px; word-break: break-all; }
-#card .meta { font-size: 12px; color: #7a705a; line-height: 1.7; }
-#card .excerpt { font-size: 12.5px; margin: 8px 0; line-height: 1.6; color: #4a4234;
-                 border-left: 3px solid #c9bfa8; padding-left: 8px; }
-#card .actions { margin-top: 10px; }
-#card a { font-size: 12px; padding: 5px 12px; border-radius: 5px; cursor: pointer;
-        border: 1px solid #b08a3e; background: #d9c58a; color: #3a2f14; text-decoration: none; }
-#card .close { position: absolute; top: 8px; right: 10px; border: none; background: none;
-               font-size: 14px; color: #999; cursor: pointer; }
-#tip { position: fixed; bottom: 10px; left: 14px; font-size: 11px; color: #4a5460; text-shadow: 0 1px 2px rgba(255,255,255,0.5); }
+:root {
+  --paper: #f2ecd9;          /* 页面纸底（与世界地图同源） */
+  --paper-card: #fbf7ea;     /* 卡片用更亮一度的纸 */
+  --ink: #3a3428;            /* 墨 */
+  --ink-faint: #8a8070;      /* 褪色墨 */
+  --ink-line: rgba(58, 52, 40, 0.75);
+  --rule-red: #c9584a;       /* 索引卡顶部红线 */
+  --seal: #c0453a;           /* 印章红（来自屋顶色板） */
+  --seal-dark: #9c352d;
+  --ok: #4f7a3f;
+  --warn: #a8762e;
+  --hand-r: 255px 18px 225px 18px / 18px 225px 18px 255px; /* 手绘线框 */
+  --hand-r-sm: 120px 10px 110px 10px / 10px 110px 10px 120px;
+  /* 手写体优先级：手札体（mac 自带手写中文）→ 行楷 → 楷体 → 西文手写 */
+  --font-hand: 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', 'STKaiti', 'Bradley Hand', 'Comic Sans MS', cursive;
+  --font-display: 'Marker Felt', 'Bradley Hand', 'Hannotate SC', 'Chalkboard SE', cursive;
+  --font-mono: ui-monospace, 'SF Mono', 'Menlo', monospace;
+}
 
-/* ---- 首次引导 Onboarding ---- */
-#onboarding { position: fixed; inset: 0; background: #1e1a2e; display: flex; align-items: center; justify-content: center; z-index: 100; }
-.ob-box { background: #2a2640; border-radius: 14px; padding: 36px 40px; width: 520px; max-width: 92vw; color: #e8e0d4; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
-.ob-box h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: 3px; color: #f4edd8; }
-.ob-box .subtitle { margin: 0 0 22px; font-size: 13px; color: #a09890; line-height: 1.6; }
-.vault-list { list-style: none; margin: 0 0 18px; padding: 0; max-height: 180px; overflow-y: auto; }
-.vault-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: #1e1a2e; margin-bottom: 6px; font-size: 13px; }
-.vault-name { font-weight: 600; color: #d9c58a; flex: 0 0 auto; }
-.vault-path { flex: 1; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.vault-theme { flex: 0 0 auto; font-size: 11px; color: #9a8; }
-.del-btn { margin-left: auto; flex: 0 0 auto; background: none; border: none; color: #c06060; cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
-.del-btn:hover { background: rgba(200,80,80,0.15); }
-.vault-badge { flex: 0 0 auto; font-size: 11px; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
-.vault-badge--ok { color: #6dcf7a; background: rgba(80,180,90,0.12); }
-.vault-badge--warn { color: #e0c040; background: rgba(200,170,40,0.12); }
-.add-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
-.add-form input, .add-form select { background: #1e1a2e; border: 1px solid #4a4264; color: #e8e0d4; border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; }
-.add-form input:focus, .add-form select:focus { border-color: #d9c58a; }
-.add-btn { align-self: flex-end; background: #3a3258; border: 1px solid #d9c58a; color: #d9c58a; border-radius: 7px; padding: 8px 18px; font-size: 13px; cursor: pointer; letter-spacing: 1px; }
-.add-btn:hover { background: #4a4270; }
-.ob-error { min-height: 18px; font-size: 12px; color: #e07060; margin-bottom: 8px; }
-.found-btn { width: 100%; padding: 12px; background: #b08a3e; border: none; border-radius: 8px; color: #fff; font-size: 15px; cursor: pointer; letter-spacing: 2px; margin-top: 8px; }
-.found-btn:hover:not(:disabled) { background: #d9a84e; }
-.found-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ---- 地图内 HUD 与悬浮标签 ---- */
+#hud { position: fixed; top: 14px; left: 16px; color: var(--ink); pointer-events: none; }
+#hud h1 { margin: 0; font-size: 17px; letter-spacing: 4px; font-family: var(--font-display); }
+#hud .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; font-family: var(--font-hand); }
 
-/* ---- 返回按钮 ---- */
-#back-btn { position: fixed; top: 12px; left: 14px; z-index: 10; background: rgba(30,26,46,0.85); border: 1px solid #4a4264; color: #d9c58a; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-#back-btn:hover { background: rgba(58,50,88,0.95); }
+#label { position: fixed; padding: 4px 10px; background: var(--paper-card); color: var(--ink);
+         border: 1.5px solid var(--ink-line); border-radius: var(--hand-r-sm);
+         font-size: 12px; font-family: var(--font-hand); pointer-events: none; display: none;
+         white-space: nowrap; z-index: 5; box-shadow: 2px 3px 0 rgba(58,52,40,0.12); }
+
+#tip { position: fixed; bottom: 10px; left: 16px; font-size: 11px; color: var(--ink-faint);
+       font-family: var(--font-hand); }
+
+/* ---- 建筑/街区信息卡：图书馆索引卡 ---- */
+#card { position: fixed; top: 18px; right: 18px; width: 300px;
+        background:
+          linear-gradient(var(--paper-card), var(--paper-card)) padding-box,
+          var(--paper-card);
+        border: 2px solid var(--ink-line); border-radius: var(--hand-r);
+        padding: 16px 18px 15px; display: none; color: var(--ink); z-index: 6;
+        transform: rotate(-0.6deg);
+        box-shadow: 3px 5px 0 rgba(58, 52, 40, 0.14), 0 14px 30px rgba(58, 52, 40, 0.18); }
+
+#card h3 { margin: 0 0 0; padding: 0 22px 8px 0; font-size: 16px; line-height: 1.45;
+           word-break: break-all; font-family: var(--font-hand); font-weight: 700;
+           border-bottom: 2px solid var(--rule-red); }
+
+#card .meta { font-size: 11.5px; color: var(--ink-faint); line-height: 1.9; padding: 8px 0 0;
+              border-bottom: 1px solid rgba(184, 176, 160, 0.5); padding-bottom: 8px;
+              font-family: var(--font-mono); letter-spacing: -0.2px; }
+
+#card .excerpt { font-size: 13px; margin: 10px 0 2px; line-height: 1.7; color: #4a4234;
+                 font-family: var(--font-hand); position: relative; padding-left: 14px; }
+#card .excerpt::before { content: '「'; position: absolute; left: -2px; top: -2px;
+                         color: var(--ink-faint); font-family: var(--font-hand); }
+
+#card .actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+#card a { font-size: 12.5px; padding: 6px 16px; cursor: pointer; letter-spacing: 2px;
+          border: none; border-radius: var(--hand-r-sm);
+          background: var(--seal); color: #fdf8ee; text-decoration: none;
+          font-family: var(--font-hand); font-weight: 700;
+          box-shadow: 2px 2px 0 rgba(58, 52, 40, 0.25); transition: transform .12s, background .12s; }
+#card a:hover { background: var(--seal-dark); transform: translate(-1px, -1px) rotate(-0.5deg); }
+
+#card .close { position: absolute; top: 10px; right: 12px; border: none; background: none;
+               font-size: 14px; color: var(--ink-faint); cursor: pointer; }
+#card .close:hover { color: var(--seal); }
+
+/* ---- 首页：地图集扉页（仓库管理） ---- */
+#onboarding { position: fixed; inset: 0; z-index: 100;
+              display: flex; align-items: center; justify-content: center;
+              background:
+                radial-gradient(circle at 18% 12%, rgba(58,52,40,0.045) 0 1.5px, transparent 2px),
+                radial-gradient(circle at 82% 78%, rgba(58,52,40,0.04) 0 1px, transparent 1.6px),
+                radial-gradient(circle at 55% 40%, rgba(58,52,40,0.03) 0 1px, transparent 1.5px),
+                var(--paper);
+              background-size: 220px 190px, 260px 230px, 180px 170px, auto; }
+/* 扉页外框：呼应世界地图的羊皮纸边框 */
+#onboarding::before { content: ''; position: absolute; inset: 20px; pointer-events: none;
+                      border: 2px solid rgba(58, 52, 40, 0.55); border-radius: var(--hand-r); }
+#onboarding::after { content: ''; position: absolute; inset: 30px; pointer-events: none;
+                     border: 1px solid rgba(58, 52, 40, 0.22); border-radius: var(--hand-r); }
+
+.ob-box { background: var(--paper-card); width: 560px; max-width: 90vw; max-height: 86vh; overflow-y: auto;
+          border: 2px solid var(--ink-line); border-radius: var(--hand-r);
+          padding: 38px 44px 34px; color: var(--ink); position: relative; z-index: 1;
+          box-shadow: 4px 6px 0 rgba(58, 52, 40, 0.12), 0 18px 44px rgba(58, 52, 40, 0.16); }
+
+.ob-box h1 { margin: 0 0 2px; font-size: 34px; letter-spacing: 5px;
+             font-family: var(--font-display); color: var(--ink); font-weight: 400;
+             transform: rotate(-0.8deg); }
+.ob-box h1::after { content: ''; display: block; width: 148px; height: 3px; margin-top: 8px;
+                    background: var(--ink); border-radius: 40% 60% 55% 45% / 60% 40% 60% 40%;
+                    opacity: 0.8; transform: rotate(-0.4deg); }
+.ob-box .subtitle { margin: 12px 0 24px; font-size: 14px; color: var(--ink-faint);
+                    line-height: 1.7; font-family: var(--font-hand); }
+
+.vault-list { list-style: none; margin: 0 0 20px; padding: 0; max-height: 220px; overflow-y: auto; }
+.vault-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 9px;
+              background: transparent; border: 1.5px solid var(--ink-line);
+              border-radius: var(--hand-r-sm); font-size: 13px;
+              transition: transform .12s, box-shadow .12s; }
+.vault-item:hover { transform: rotate(-0.3deg); box-shadow: 2px 3px 0 rgba(58, 52, 40, 0.1); }
+.vault-item:nth-child(even):hover { transform: rotate(0.3deg); }
+.vault-name { font-weight: 700; color: var(--ink); flex: 0 0 auto; font-family: var(--font-hand); font-size: 14px; }
+.vault-path { flex: 1; color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; font-size: 10.5px; font-family: var(--font-mono); }
+.vault-theme { flex: 0 0 auto; font-size: 11px; color: var(--ink-faint); font-family: var(--font-hand); }
+
+/* 印章式状态徽标 */
+.vault-badge { flex: 0 0 auto; font-size: 10.5px; padding: 3px 9px; white-space: nowrap;
+               font-family: var(--font-hand); font-weight: 700; letter-spacing: 0.5px;
+               border-radius: var(--hand-r-sm); transform: rotate(-2deg); background: transparent; }
+.vault-badge--ok { color: var(--ok); border: 1.5px solid var(--ok); }
+.vault-badge--warn { color: var(--warn); border: 1.5px solid var(--warn); }
+
+.del-btn { margin-left: 2px; flex: 0 0 auto; background: none; border: none; color: var(--ink-faint);
+           cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 50%; }
+.del-btn:hover { color: #fdf8ee; background: var(--seal); }
+
+.add-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.add-form input, .add-form select {
+  background: transparent; border: none; border-bottom: 1.5px solid rgba(58, 52, 40, 0.4);
+  color: var(--ink); border-radius: 0; padding: 8px 4px; font-size: 13px; outline: none;
+  font-family: var(--font-hand); }
+.add-form input::placeholder { color: rgba(138, 128, 112, 0.75); }
+.add-form input:focus, .add-form select:focus { border-bottom-color: var(--seal); }
+.add-btn { align-self: flex-end; background: transparent; border: 1.5px solid var(--ink-line);
+           color: var(--ink); border-radius: var(--hand-r-sm); padding: 7px 18px; font-size: 13px;
+           cursor: pointer; letter-spacing: 2px; font-family: var(--font-hand); font-weight: 700;
+           transition: transform .12s, box-shadow .12s; }
+.add-btn:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 rgba(58, 52, 40, 0.2); }
+
+.ob-error { min-height: 18px; font-size: 12px; color: var(--seal); margin-bottom: 8px;
+            font-family: var(--font-hand); }
+
+.found-btn { width: 100%; padding: 14px; border: none; border-radius: var(--hand-r);
+             background: var(--seal); color: #fdf8ee; font-size: 16px; cursor: pointer;
+             letter-spacing: 6px; margin-top: 10px; font-family: var(--font-hand); font-weight: 700;
+             box-shadow: 3px 4px 0 rgba(58, 52, 40, 0.22); transition: transform .12s, background .12s; }
+.found-btn:hover:not(:disabled) { background: var(--seal-dark); transform: translate(-1px, -2px) rotate(-0.3deg); }
+.found-btn:disabled { background: transparent; color: var(--ink-faint);
+                      border: 1.5px dashed rgba(138, 128, 112, 0.6); box-shadow: none;
+                      cursor: not-allowed; }
+
+/* ---- 返回 / 管理按钮（地图上的纸片按钮） ---- */
+#back-btn, #manage-btn { position: fixed; top: 12px; z-index: 10;
+  background: var(--paper-card); border: 1.5px solid var(--ink-line); color: var(--ink);
+  border-radius: var(--hand-r-sm); padding: 6px 16px; font-size: 13px; cursor: pointer;
+  font-family: var(--font-hand); font-weight: 700;
+  box-shadow: 2px 3px 0 rgba(58, 52, 40, 0.12); transition: transform .12s; }
+#back-btn { left: 14px; }
+#manage-btn { right: 14px; }
+#back-btn:hover, #manage-btn:hover { transform: translate(-1px, -1px) rotate(-0.4deg); }
+
+/* 无障碍与克制的动效 */
+:focus-visible { outline: 2px solid var(--seal); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

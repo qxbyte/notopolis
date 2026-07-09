@@ -48,7 +48,7 @@ async function enterCity(vaultId: string): Promise<void> {
 function goHome(): void {
   clearCurrent();
   __notopolis.view = 'onboarding';
-  showHome(container, {
+  current = showHome(container, {
     onEnter: goWorldMap,
   });
 }

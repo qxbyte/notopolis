@@ -19,7 +19,10 @@ export interface HomeOptions {
   onAdd?: () => void;
 }
 
-export function showHome(parent: HTMLElement, options: HomeOptions | (() => void)): void {
+export function showHome(
+  parent: HTMLElement,
+  options: HomeOptions | (() => void),
+): { dispose(): void } {
   // 兼容旧调用方式：showHome(parent, onDone)
   const onEnter = typeof options === 'function' ? options : options.onEnter;
 
@@ -135,11 +138,13 @@ export function showHome(parent: HTMLElement, options: HomeOptions | (() => void
     overlay.remove();
     onEnter();
   });
+
+  return { dispose: () => overlay.remove() };
 }
 
 // 向后兼容别名
-export function showOnboarding(parent: HTMLElement, onDone: () => void): void {
-  showHome(parent, onDone);
+export function showOnboarding(parent: HTMLElement, onDone: () => void): { dispose(): void } {
+  return showHome(parent, onDone);
 }
 
 const TIER_LABELS: Record<string, string> = {
