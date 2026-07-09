@@ -135,6 +135,8 @@ async function goCity(vault: WorldVault, restoreTaskPanel = false, summary = fal
     dbg.visitSummary = () => lastDiff;
     dbg.setLens = (id: string) => cityHandle.setLens(id as never);
     dbg.lensHits = () => cityHandle.lensHits();
+    dbg.openGardenPanel = () => cityHandle.openGardenPanel();
+    dbg.navigateLink = (p: string) => cityHandle.navigateLink(p);
   } finally {
     navigating = false;
   }

@@ -16,6 +16,7 @@ import { createCards } from '../ui/cards';
 import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
+import { createGardenPanel } from '../ui/gardenpanel';
 import { groupTasks, totalConstruction } from '../util/tasks';
 import { obsidianUri } from '../ui/obsidian';
 import { LENSES, lensById, gardenSetOf, lensHitBuildings, type LensId } from '../render2d/lenses';
@@ -60,6 +61,10 @@ export interface CityViewHandle {
   setLens(id: LensId): void;
   /** 当前透镜命中的 notePath 列表 */
   lensHits(): string[];
+  /** 打开园丁面板（并激活 garden 透镜） */
+  openGardenPanel(): void;
+  /** 沿链接漫游到目标建筑（飞行 + 高亮 + 卡片刷新） */
+  navigateLink(notePath: string): void;
 }
 
 export function showCity2D(
@@ -135,6 +140,16 @@ export function showCity2D(
   const buildingIndex = new Map<string, { b: import('@shared/types').Building; dir: string }>();
   for (const d of city.districts) {
     for (const b of d.buildings) buildingIndex.set(b.notePath, { b, dir: d.dir });
+  }
+
+  // 反向链接索引：notePath → 引用它的 notePath[]（F6 链接漫游用）
+  const inlinkSources = new Map<string, string[]>();
+  for (const { b } of buildingIndex.values()) {
+    for (const t of b.outlinks) {
+      const arr = inlinkSources.get(t);
+      if (arr) arr.push(b.notePath);
+      else inlinkSources.set(t, [b.notePath]);
+    }
   }
   // 低分辨率离屏 blit（8ppu 质量，交互流畅用）
   world.paint((ctx) => painter.drawStatic(ctx));
@@ -267,20 +282,43 @@ export function showCity2D(
 
   hud.addButton('🔍 搜索', () => searchUI.open());
 
-  // ---- 12c. 工地面板（F2）----
+  const DAY = 86400000;
+
+  // ---- 12c. 工地面板（F2）+ 园丁面板（F5）----
   const taskPanel = createTaskPanel(container, {
     onLocate: (notePath) => locate(notePath),
     obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
   });
   taskPanel.refresh(groupTasks(city));
-  const constructionN = totalConstruction(city);
-  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () => {
-    taskPanel.toggle();
-    setLens(taskPanel.isOpen() ? 'tasks' : 'none');
+
+  const gardenPanel = createGardenPanel(container, {
+    onLocate: (notePath) => locate(notePath),
+    obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
   });
+  // 园丁清单：非 civic 中 mtimeMs 最旧 5 栋（用 generatedAt 保持确定性，不取 Date.now）
+  const gardenList = city.districts
+    .flatMap((d) => d.buildings.map((b) => ({ b, dir: d.dir })))
+    .filter((x) => !x.b.isCivic)
+    .sort((a, z) => a.b.mtimeMs - z.b.mtimeMs || a.b.notePath.localeCompare(z.b.notePath))
+    .slice(0, 5)
+    .map((x) => ({
+      notePath: x.b.notePath,
+      title: x.b.title,
+      dir: x.dir,
+      daysSince: Math.max(0, Math.floor((city.generatedAt - x.b.mtimeMs) / DAY)),
+    }));
+  gardenPanel.refresh(gardenList);
+
+  const constructionN = totalConstruction(city);
+  hud.addButton(constructionN > 0 ? `🚧 工地 ${constructionN}` : '🚧 无工地', () =>
+    setLens(lensId === 'tasks' ? 'none' : 'tasks'),
+  );
   // 面板经 Esc/✕ 关闭时还原透镜
   taskPanel.onClose = () => {
     if (lensId === 'tasks') setLens('none');
+  };
+  gardenPanel.onClose = () => {
+    if (lensId === 'garden') setLens('none');
   };
 
   // ---- 12d. 透镜图层（F4/F5）----
@@ -294,6 +332,11 @@ export function showCity2D(
     lensHitCache = lensHitBuildings(city, id, { gardenSet });
     // 按钮高亮
     for (const [bid, btn] of lensBtns) btn.classList.toggle('active', bid === id);
+    // 面板与透镜联动：tasks↔工地面板、garden↔园丁面板
+    if (id === 'tasks') taskPanel.open();
+    else taskPanel.close();
+    if (id === 'garden') gardenPanel.open();
+    else gardenPanel.close();
     // HUD 提示
     const def = lensById(id);
     if (id === 'none') {
@@ -430,18 +473,34 @@ export function showCity2D(
     }
     if (item.kind === 'building') {
       const d = item.data as { type: 'building'; b: import('@shared/types').Building; dir: string };
-      cards.showBuilding(d.b, d.dir, vault.path);
+      showBuildingCard(d.b, d.dir);
     } else if (item.kind === 'district') {
       const d = item.data as { type: 'district'; district: import('@shared/types').District };
       cards.showDistrict(d.district, Date.now());
     }
   }
 
-  // 按 notePath 拾取建筑并展示信息卡（搜索/任务面板/链接漫游共用）
+  // 组装某建筑的入/出链数据（供卡片链接漫游）；解析不到标题的条目剔除
+  function linksFor(notePath: string): import('../ui/cards').CardLinks {
+    const outTo = (buildingIndex.get(notePath)?.b.outlinks ?? [])
+      .map((p) => ({ path: p, title: buildingIndex.get(p)?.b.title ?? '' }))
+      .filter((l) => l.title);
+    const inFrom = (inlinkSources.get(notePath) ?? [])
+      .map((p) => ({ path: p, title: buildingIndex.get(p)?.b.title ?? '' }))
+      .filter((l) => l.title);
+    return { inFrom, outTo, onNavigate: (p) => navigateLink(p) };
+  }
+
+  // 展示建筑卡片（带链接段），供点击/搜索/定位/漫游共用
+  function showBuildingCard(b: import('@shared/types').Building, dir: string): void {
+    cards.showBuilding(b, dir, vault.path, linksFor(b.notePath));
+  }
+
+  // 按 notePath 拾取建筑并展示信息卡（不移动镜头）
   function pickByPath(notePath: string): boolean {
     const hit = buildingIndex.get(notePath);
     if (!hit) return false;
-    cards.showBuilding(hit.b, hit.dir, vault.path);
+    showBuildingCard(hit.b, hit.dir);
     return true;
   }
 
@@ -451,8 +510,13 @@ export function showCity2D(
     if (!hit) return false;
     flyTo(hit.b.x, hit.b.z, zoomPx);
     highlightBuilding(hit.b);
-    cards.showBuilding(hit.b, hit.dir, vault.path);
+    showBuildingCard(hit.b, hit.dir);
     return true;
+  }
+
+  // 链接漫游：飞到目标建筑并就地刷新卡片（连续漫游）
+  function navigateLink(notePath: string): void {
+    locate(notePath);
   }
 
   // ---- 16. Hover ----
@@ -530,6 +594,12 @@ export function showCity2D(
     lensHits(): string[] {
       return lensHitCache.map((b) => b.notePath);
     },
+    openGardenPanel(): void {
+      setLens('garden');
+    },
+    navigateLink(notePath: string): void {
+      navigateLink(notePath);
+    },
 
     pois: painter.pois,
 
@@ -558,7 +628,7 @@ export function showCity2D(
       if (index < 0 || index >= buildings.length) return;
       const item = buildings[index];
       const d = item.data as { type: 'building'; b: import('@shared/types').Building; dir: string };
-      cards.showBuilding(d.b, d.dir, vault.path);
+      showBuildingCard(d.b, d.dir);
     },
 
     dispose(): void {
@@ -576,6 +646,7 @@ export function showCity2D(
       canvas.remove();
       searchUI.dispose();
       taskPanel.dispose();
+      gardenPanel.dispose();
       hud.dispose();
       const card = container.querySelector('#card');
       if (card) card.remove();

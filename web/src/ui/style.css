@@ -158,6 +158,14 @@
 #manage-btn { right: 14px; }
 #back-btn:hover, #manage-btn:hover { transform: translate(-1px, -1px) rotate(-0.4deg); }
 
+/* ---- 卡片链接漫游段（入链/出链） ---- */
+.card-links { margin: 10px 0 2px; font-size: 12.5px; line-height: 1.6; }
+.card-links.empty { color: var(--ink-faint); font-style: italic; }
+.card-link-head { color: var(--ink-faint); font-size: 11.5px; margin: 6px 0 2px; letter-spacing: 1px; }
+.card-link { color: var(--seal); cursor: pointer; text-decoration: underline dotted;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 0; }
+.card-link:hover { color: var(--seal-dark); }
+
 /* ---- HUD 功能按钮栏（搜索/工地/漫游/海报，城市视图右上） ---- */
 .hud-bar { position: fixed; top: 12px; right: 14px; z-index: 10; display: flex; gap: 6px; }
 .hud-btn, .lens-btn { background: var(--paper-card); border: 1.5px solid var(--ink-line);

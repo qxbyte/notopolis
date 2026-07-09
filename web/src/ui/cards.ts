@@ -15,8 +15,18 @@ export function esc(s: string): string {
   ));
 }
 
+export interface CardLink {
+  path: string;
+  title: string;
+}
+export interface CardLinks {
+  inFrom: CardLink[];
+  outTo: CardLink[];
+  onNavigate(path: string): void;
+}
+
 export interface CardsHandle {
-  showBuilding(b: Building, dir: string, vaultAbsPath: string): void;
+  showBuilding(b: Building, dir: string, vaultAbsPath: string, links?: CardLinks): void;
   showDistrict(d: District, now: number): void;
   hide(): void;
 }
@@ -28,16 +38,45 @@ export function createCards(parent: HTMLElement): CardsHandle {
 
   const DAY = 86400000;
 
+  // 记录当前卡片的链接跳转回调（onNavigate），供 data-nav 行点击调用
+  let navHandler: ((path: string) => void) | null = null;
+  function onCardClick(e: MouseEvent): void {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('.card-link[data-nav]');
+    if (!row || !navHandler) return;
+    const p = row.getAttribute('data-nav');
+    if (p) navHandler(p);
+  }
+  card.addEventListener('click', onCardClick);
+
+  function linkSection(links: CardLinks): string {
+    const { inFrom, outTo } = links;
+    if (inFrom.length === 0 && outTo.length === 0) {
+      return '<div class="card-links empty">🏝 这是一座孤岛——还没有任何链接</div>';
+    }
+    const rows = (arr: CardLink[]) =>
+      arr
+        .slice(0, 8)
+        .map((l) => `<div class="card-link" data-nav="${esc(l.path)}">· ${esc(l.title)}</div>`)
+        .join('');
+    let html = '<div class="card-links">';
+    if (inFrom.length) html += `<div class="card-link-head">← 入链 (${inFrom.length})</div>${rows(inFrom)}`;
+    if (outTo.length) html += `<div class="card-link-head">→ 出链 (${outTo.length})</div>${rows(outTo)}`;
+    html += '</div>';
+    return html;
+  }
+
   return {
-    showBuilding(b: Building, dir: string, vaultAbsPath: string): void {
+    showBuilding(b: Building, dir: string, vaultAbsPath: string, links?: CardLinks): void {
       const date = new Date(b.mtimeMs).toLocaleDateString('zh-CN');
       const uri = obsidianUri(vaultAbsPath, b.notePath);
       const prefix = b.isCivic ? '🏛 ' : b.landmark ? '⭐ ' : '';
+      navHandler = links?.onNavigate ?? null;
       card.innerHTML = `
         <button class="close" onclick="this.parentElement.style.display='none'">✕</button>
         <h3>${prefix}${esc(b.title)}</h3>
         <div class="meta">📁 ${esc(dir || '(根目录)')} · ${b.wordCount} 字 · 被引 ${b.inlinks} · 待办 ${b.openTasks}<br>🕐 最后编辑 ${date}</div>
         <div class="excerpt">${esc(b.excerpt || '（无摘要）')}</div>
+        ${links ? linkSection(links) : ''}
         <div class="actions"><a href="${uri}">在 Obsidian 打开</a></div>`;
       card.style.display = 'block';
     },
