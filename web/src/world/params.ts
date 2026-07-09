@@ -8,6 +8,16 @@
 import { rng0 } from '../util/seed';
 import { fbm } from '../util/noise';
 import { polyDist } from '../util/poly';
+import { getBiome, WaterStyle } from '../render2d/biomes';
+
+export interface SeaData {
+  sideAngle: number;
+  coastPts: [number, number][];
+  coastDist: (x: number, z: number) => number;
+  islands: { x: number; z: number; r: number }[];
+  lighthousePos: { x: number; z: number };
+  piers: { x: number; z: number; angle: number }[];
+}
 
 export interface Lake {
   x: number;
@@ -15,6 +25,7 @@ export interface Lake {
   r: number;
   city?: boolean;
   seed: number;
+  frozen?: boolean;
 }
 
 export interface WorldParams {
@@ -46,6 +57,12 @@ export interface WorldParams {
   cityHalfD: number;
   worldR: number;
   T: number;
+
+  // 主题
+  theme: string;
+  waterStyle: WaterStyle;
+  // harbor 专属（其他主题为 undefined）
+  seaData?: SeaData;
 }
 
 export function worldParams(
@@ -53,7 +70,8 @@ export function worldParams(
   cityHalfW: number,
   cityHalfD: number,
   worldR: number,
-  T: number
+  T: number,
+  theme: string = 'plains',
 ): WorldParams {
   // ========== 世界种子：一切地貌参数由 vault 决定，不同仓库不同世界 ==========
   const wrng = rng0('world:' + vaultPath);
@@ -135,6 +153,74 @@ export function worldParams(
   });
   const canalEndY = canalY[canalY.length - 1];
 
+  // harbor：不生成大河，改生成海岸线
+  let seaData: SeaData | undefined;
+  if (theme === 'harbor') {
+    const wrngHarbor = rng0('harbor:' + vaultPath);
+    // 海在哪一侧（方位角）
+    const sideAngle = wrngHarbor() * Math.PI * 2;
+    const cosSide = Math.cos(sideAngle), sinSide = Math.sin(sideAngle);
+    // 海岸线基准距离（城市边缘外一侧）
+    const coastBaseD = maxHalf + 30 + wrngHarbor() * 20;
+    const N_COAST = 40;
+    // 采样海岸线 40 点（垂直于 sideAngle 方向延伸）
+    const coastPts: [number, number][] = [];
+    for (let i = 0; i <= N_COAST; i++) {
+      const v = (i / N_COAST - 0.5) * (maxHalf * 3.5);
+      const waver = Math.sin(v * 0.023) * 12 + (wrngHarbor() - 0.5) * 8;
+      const d = coastBaseD + waver;
+      // 海湾凹弧：1-2 个随机凹陷
+      coastPts.push([cosSide * d - sinSide * v, sinSide * d + cosSide * v]);
+    }
+    // 符号距离函数：点投影到 sideAngle 轴的距离；负 = 越过海岸（海里）
+    function coastDist(x: number, z: number): number {
+      // 沿 sideAngle 方向的投影距离
+      const proj = x * cosSide + z * sinSide;
+      // 找最近海岸线点的 v 坐标（垂直分量）
+      const vProj = -x * sinSide + z * cosSide;
+      // 对应 v 处的海岸基准距离（简化：用最近采样点插值）
+      const idx = Math.max(0, Math.min(N_COAST, Math.round((vProj / (maxHalf * 3.5) + 0.5) * N_COAST)));
+      const cp = coastPts[idx] ?? coastPts[N_COAST];
+      const coastProjD = cp[0] * cosSide + cp[1] * sinSide;
+      return coastProjD - proj; // 正 = 陆地侧，负 = 海里
+    }
+    // 小岛（1-2 个，在海里）
+    const islandCount = 1 + Math.floor(wrngHarbor() * 2);
+    const islands: { x: number; z: number; r: number }[] = [];
+    for (let ii = 0; ii < islandCount; ii++) {
+      const iv = (wrngHarbor() - 0.5) * maxHalf * 2;
+      const id = coastBaseD + 25 + wrngHarbor() * 20;
+      islands.push({
+        x: cosSide * id - sinSide * iv,
+        z: sinSide * id + cosSide * iv,
+        r: 5 + wrngHarbor() * 5,
+      });
+    }
+    // 灯塔（海岬位置 = 海岸线曲率较高处，简化取首/尾1/4处）
+    const ltIdx = Math.floor(wrngHarbor() * 10);
+    const lighthousePos = { x: coastPts[ltIdx][0], z: coastPts[ltIdx][1] };
+    // 码头（城市朝海边缘 2-3 个）
+    const pierCount = 2 + Math.floor(wrngHarbor() * 2);
+    const piers: { x: number; z: number; angle: number }[] = [];
+    for (let pi = 0; pi < pierCount; pi++) {
+      const pv = (wrngHarbor() - 0.5) * maxHalf * 1.6;
+      const pd = maxHalf * 0.85 + wrngHarbor() * 8;
+      piers.push({
+        x: cosSide * pd - sinSide * pv,
+        z: sinSide * pd + cosSide * pv,
+        angle: sideAngle,
+      });
+    }
+    seaData = { sideAngle, coastPts, coastDist, islands, lighthousePos, piers };
+  }
+
+  // snow 主题：所有湖标记 frozen
+  if (theme === 'snow') {
+    for (const lk of lakes) {
+      (lk as Lake & { frozen?: boolean }).frozen = true;
+    }
+  }
+
   return {
     RA, cosR, sinR,
     riverBaseD, RIVER_W,
@@ -143,5 +229,8 @@ export function worldParams(
     canalPts, canalY, canalEndY,
     lakes,
     cityHalfW, cityHalfD, worldR, T,
+    theme,
+    waterStyle: getBiome(theme).waterStyle,
+    seaData,
   };
 }
