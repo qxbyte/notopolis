@@ -48,9 +48,16 @@ test('onboarding → worldmap → city smoke test', async ({ page }) => {
     { timeout: 30000 }
   );
 
+  // ---- 世界地图截图 ----
+  // 等待至少 1 帧渲染完成（canvas 非空）
+  await page.waitForTimeout(800);
+  await page.screenshot({
+    path: path.join(process.cwd(), '.superpowers/e2e-artifacts/worldmap.png'),
+  });
+
   // ---- 进城流程 ----
-  // 从后端获取 vaultId
-  const apiResp = await page.request.get('http://localhost:4777/api/world', { timeout: 10000 });
+  // 从后端获取 vaultId（使用 baseURL，避免硬编码端口）
+  const apiResp = await page.request.get('/api/world', { timeout: 10000 });
   const world = await apiResp.json() as { vaults: Array<{ id: string }> };
   const vaultId = world.vaults[0]?.id;
   expect(vaultId).toBeTruthy();
@@ -76,17 +83,55 @@ test('onboarding → worldmap → city smoke test', async ({ page }) => {
   // HUD 文本含「拓荒营地」（tier = camp，vault-a 只有 5 个 .md 文件）
   expect(hudText).toContain('拓荒营地');
 
-  // 触发建筑拾取
+  // ---- city-notes 截图（城全景）----
+  await page.waitForTimeout(500);
+  await page.screenshot({
+    path: path.join(process.cwd(), '.superpowers/e2e-artifacts/city-notes.png'),
+  });
+
+  // ---- city-zoom 截图（滚轮放大一档）----
+  // 在 canvas 中心滚轮放大
+  const canvas = page.locator('canvas').first();
+  const box = await canvas.boundingBox();
+  if (box) {
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    // 向上滚动放大（deltaY 负值 = zoom in）
+    await page.mouse.wheel(0, -300);
+    await page.waitForTimeout(400);
+  }
+  await page.screenshot({
+    path: path.join(process.cwd(), '.superpowers/e2e-artifacts/city-zoom.png'),
+  });
+
+  // ---- perf 探针（2D 渲染器）----
+  // 等待足够多帧积累（约 60 帧 = 1s）
+  await page.waitForTimeout(1200);
+  const perfData = await page.evaluate(() => {
+    return (window as any).__notopolis?.perf?.() ?? {};
+  });
+  console.log('[perf]', JSON.stringify(perfData));
+  // 2D 渲染器目标：avgMs < 25ms（无头环境）
+  if (perfData.avgMs !== undefined) {
+    expect(perfData.avgMs).toBeLessThan(100); // 宽松阈值，无头 CI 容忍更高延迟
+  }
+  // hitItems 应 > 0（有建筑被绘制）
+  if (perfData.hitItems !== undefined) {
+    expect(perfData.hitItems).toBeGreaterThan(0);
+  }
+
+  // ---- 触发建筑拾取 ----
   await page.evaluate(() => {
     (window as any).__notopolis.pickBuilding(0);
   });
 
-  // 等待 #card 可见（或含「在 Obsidian 打开」文本的弹窗）
-  await expect(
-    page.locator('#card').or(page.getByText('在 Obsidian 打开'))
-  ).toBeVisible({ timeout: 10000 });
+  // 等待 #card 可见（卡片内含「在 Obsidian 打开」链接）
+  await expect(page.locator('#card')).toBeVisible({ timeout: 10000 });
+  // 确认卡片内有「在 Obsidian 打开」链接
+  await expect(page.locator('#card a').filter({ hasText: '在 Obsidian 打开' })).toBeVisible();
 
-  // 截图
+  // 最终截图（含卡片）
   await page.screenshot({
     path: path.join(process.cwd(), '.superpowers/e2e-artifacts/city.png'),
   });
