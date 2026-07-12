@@ -87,7 +87,10 @@ async function showVisitSummary(vaultId: string, handle: CityViewHandle): Promis
 }
 
 function mountWorldMap(vaults: WorldVault[]): { dispose(): void } {
-  return showWorldMap2D(container, vaults, (v) => goCity(v, false, true), () => settingsHub.open());
+  const handle = showWorldMap2D(container, vaults, (v) => goCity(v, false, true), () => settingsHub.open());
+  // 调试钩子：程序化触发首页雨云小剧场（e2e/截图用，等同点击云朵）
+  (__notopolis as Record<string, unknown>).worldRain = () => handle.startRain();
+  return handle;
 }
 
 async function goWorldMap(): Promise<void> {

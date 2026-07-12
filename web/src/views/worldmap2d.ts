@@ -6,6 +6,13 @@
 import { PAPER } from '../render2d/sketch';
 import { TIER } from '../ui/hud';
 import type { WorldVault } from '../api';
+import {
+  createWeather,
+  startRain,
+  tickWeather,
+  inCloudHitbox,
+  SUN_MS,
+} from '../util/weather';
 
 /** 读主题令牌（世界地图背景跟随六套主题换肤；每帧读取，主题切换即时生效） */
 function themeVar(name: string, fallback: string): string {
@@ -15,6 +22,8 @@ function themeVar(name: string, fallback: string): string {
 
 export interface WorldMap2DHandle {
   dispose(): void;
+  /** 程序化触发雨云小剧场（等同点击云朵；e2e/调试用） */
+  startRain(): void;
 }
 
 function getTierColor(tier: string): string {
@@ -301,6 +310,148 @@ export function showWorldMap2D(
     return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
   };
 
+  // ---- 雨云小剧场：点云 → 下雨 3s（小生物淋雨）→ 太阳 2s（欢呼）→ 复原 ----
+  // 时序在 util/weather.ts 纯状态机；雨滴/涟漪用 Math.random（表现层豁免确定性铁律）
+  const weather = createWeather();
+  interface Drop { x: number; y: number; v: number }
+  let drops: Drop[] = [];
+  let splashes: Array<{ x: number; until: number }> = [];
+
+  /** 云朵基准点（左圆心）：挂在白板左上高空（小生物聚落正上方）+ 柔和游移 */
+  function cloudPos(now: number): { cx: number; cy: number } {
+    return {
+      cx: bounds.minX + 85 + Math.sin(now / 6800) * 5,
+      cy: bounds.minZ + 58 + Math.sin(now / 4200) * 3,
+    };
+  }
+
+  function triggerRain(now: number): void {
+    if (!startRain(weather, now)) return;
+    const { cx, cy } = cloudPos(now);
+    const ground = bounds.maxZ - 30;
+    // 雨幕比云略宽罩住小生物聚落；初始铺满整条下落柱，点云即见满幕雨
+    drops = Array.from({ length: 34 }, () => ({
+      x: cx + 11 + (Math.random() * 2 - 1) * 52,
+      y: cy + 12 + Math.random() * (ground - cy - 20),
+      v: 3.2 + Math.random() * 2,
+    }));
+    splashes = [];
+  }
+
+  /** 云（idle 白云 / rain 灰雨云鼓起）；sun 相位淡出让位太阳，复原时淡回 */
+  function drawCloud(ctx2: CanvasRenderingContext2D, now: number): void {
+    let alpha = 1;
+    if (weather.phase === 'sun') alpha = Math.max(0, 1 - (now - weather.since) / 260);
+    else if (weather.phase === 'idle' && weather.since > 0) {
+      alpha = Math.min(1, (now - weather.since) / 300);
+    }
+    if (alpha <= 0) return;
+    const raining = weather.phase === 'rain';
+    const { cx, cy } = cloudPos(now);
+    ctx2.save();
+    ctx2.globalAlpha = alpha;
+    ctx2.strokeStyle = PAPER.ink;
+    ctx2.lineWidth = 1.2;
+    ctx2.lineCap = 'round';
+    // 雨云微微鼓起（以云心为锚缩放）
+    if (raining) {
+      const puff = 1 + 0.22 * Math.min(1, (now - weather.since) / 320);
+      ctx2.translate(cx + 11, cy - 5);
+      ctx2.scale(puff, puff);
+      ctx2.translate(-(cx + 11), -(cy - 5));
+    }
+    ctx2.beginPath();
+    ctx2.arc(cx, cy, 9, Math.PI * 0.5, Math.PI * 1.5);
+    ctx2.arc(cx + 9, cy - 9, 10, Math.PI, Math.PI * 1.9);
+    ctx2.arc(cx + 22, cy - 6, 8, Math.PI * 1.2, Math.PI * 1.98);
+    ctx2.arc(cx + 26, cy, 7, Math.PI * 1.5, Math.PI * 0.5);
+    ctx2.closePath();
+    ctx2.fillStyle = raining ? '#B9C2CE' : '#FFFFFF';
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.restore();
+  }
+
+  /** 雨丝 + 落地涟漪（画在小生物之上，营造「淋在身上」） */
+  function drawRain(ctx2: CanvasRenderingContext2D, now: number): void {
+    if (weather.phase !== 'rain') return;
+    const ground = bounds.maxZ - 30;
+    const { cy } = cloudPos(now);
+    ctx2.save();
+    ctx2.strokeStyle = PAPER.waterEdge;
+    ctx2.lineWidth = 1.1;
+    ctx2.lineCap = 'round';
+    ctx2.globalAlpha = 0.75;
+    ctx2.beginPath();
+    for (const d of drops) {
+      d.y += d.v;
+      if (d.y > ground) {
+        if (splashes.length < 12) splashes.push({ x: d.x, until: now + 220 });
+        d.y = cy + 10;
+      }
+      ctx2.moveTo(d.x + 1, d.y - 5);
+      ctx2.lineTo(d.x, d.y);
+    }
+    ctx2.stroke();
+    // 涟漪：落点处一圈渐散的小椭圆
+    splashes = splashes.filter((s) => s.until > now);
+    for (const s of splashes) {
+      const p = 1 - (s.until - now) / 220;
+      ctx2.globalAlpha = 0.5 * (1 - p);
+      ctx2.beginPath();
+      ctx2.ellipse(s.x, ground, 2 + p * 4, 1 + p * 1.6, 0, 0, Math.PI * 2);
+      ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+
+  /** 太阳：雨后在云位弹性出场，带笑脸与缓转光芒 */
+  function drawSun(ctx2: CanvasRenderingContext2D, now: number): void {
+    if (weather.phase !== 'sun') return;
+    const t = now - weather.since;
+    // 出场弹跳；最后 250ms 缩小退场，恢复原样
+    const s = t > SUN_MS - 250
+      ? Math.max(0, (SUN_MS - t) / 250)
+      : easeOutBack(Math.min(1, t / 420));
+    if (s <= 0) return;
+    const { cx, cy } = cloudPos(now);
+    const sx = cx + 11;
+    const sy = cy - 5;
+    ctx2.save();
+    ctx2.translate(sx, sy);
+    ctx2.scale(s, s);
+    ctx2.strokeStyle = PAPER.ink;
+    ctx2.lineCap = 'round';
+    // 光芒（缓慢旋转）
+    const spin = now / 2600;
+    ctx2.lineWidth = 1.4;
+    ctx2.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = spin + (i / 8) * Math.PI * 2;
+      ctx2.moveTo(Math.cos(a) * 17, Math.sin(a) * 17);
+      ctx2.lineTo(Math.cos(a) * 23, Math.sin(a) * 23);
+    }
+    ctx2.stroke();
+    // 日面 + 笑脸
+    ctx2.beginPath();
+    ctx2.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx2.fillStyle = '#FFD34D';
+    ctx2.fill();
+    ctx2.lineWidth = 1.5;
+    ctx2.stroke();
+    ctx2.fillStyle = PAPER.ink;
+    for (const side of [-1, 1]) {
+      ctx2.beginPath();
+      ctx2.arc(side * 4.5, -2.5, 1.5, 0, Math.PI * 2);
+      ctx2.fill();
+    }
+    ctx2.beginPath();
+    ctx2.lineWidth = 1.3;
+    ctx2.arc(0, 1.5, 5, Math.PI * 0.15, Math.PI * 0.85);
+    ctx2.stroke();
+    ctx2.restore();
+  }
+
   function drawCritter(ctx2: CanvasRenderingContext2D, c: Critter, idx: number, now: number): void {
     const cx = bounds.minX + c.xOff;
     const ground = bounds.maxZ - 30;
@@ -310,9 +461,19 @@ export function showWorldMap2D(
     const appear = easeOutBack(p);
     // 呼吸：轻微纵向缩放（以地面为锚点）
     const breath = 1 + 0.022 * Math.sin(now / 520 + c.phase);
+    // 天气心情：淋雨缩脖发抖；放晴欢快蹦跳
+    let shiverX = 0;
+    let hopY = 0;
+    let hunch = 1;
+    if (weather.phase === 'rain') {
+      shiverX = Math.sin(now / 45 + c.phase * 7) * 1.1;
+      hunch = 0.94;
+    } else if (weather.phase === 'sun') {
+      hopY = Math.abs(Math.sin((now - weather.since) / 170 + c.phase)) * 4;
+    }
     ctx2.save();
-    ctx2.translate(cx, ground);
-    ctx2.scale(appear * (2 - breath), appear * breath);
+    ctx2.translate(cx + shiverX, ground - hopY);
+    ctx2.scale(appear * (2 - breath), appear * breath * hunch);
 
     // 身体（墨线描边，手绘同源）
     ctx2.lineWidth = 1.6;
@@ -336,7 +497,7 @@ export function showWorldMap2D(
       blink.until = now + 130;
       blink.next = now + 1600 + Math.random() * 3200;
     }
-    const blinking = now < blink.until;
+    const blinking = now < blink.until || weather.phase === 'rain'; // 淋雨时眼睛紧闭
     for (const side of [-1, 1]) {
       const ex = side * eyeDx;
       if (c.sclera) {
@@ -353,10 +514,14 @@ export function showWorldMap2D(
         ctx2.strokeStyle = c.sclera ? PAPER.ink : '#20241C';
         ctx2.stroke();
       } else {
-        // 目光方向：世界坐标下从眼睛指向鼠标
+        // 目光方向：放晴时集体望向太阳；平时看鼠标（无鼠标缓慢游移）
         let dx = 0;
         let dz = 0;
-        if (mouseWorld) {
+        if (weather.phase === 'sun') {
+          const cp = cloudPos(now);
+          dx = cp.cx + 11 - (cx + ex);
+          dz = cp.cy - 5 - (ground + eyeY);
+        } else if (mouseWorld) {
           dx = mouseWorld[0] - (cx + ex);
           dz = mouseWorld[1] - (ground + eyeY);
         } else {
@@ -372,13 +537,16 @@ export function showWorldMap2D(
       }
     }
 
-    // 嘴
-    if (c.mouth !== 'none') {
+    // 嘴：淋雨全员委屈下弯，放晴全员微笑，平时各自默认表情
+    const mood: 'smile' | 'flat' | 'none' | 'sad' =
+      weather.phase === 'rain' ? 'sad' : weather.phase === 'sun' ? 'smile' : c.mouth;
+    if (mood !== 'none') {
       ctx2.beginPath();
       ctx2.lineWidth = 1.3;
       ctx2.strokeStyle = PAPER.ink;
       const my = eyeY + c.h * 0.22;
-      if (c.mouth === 'smile') ctx2.arc(0, my - 1.5, 4, Math.PI * 0.15, Math.PI * 0.85);
+      if (mood === 'smile') ctx2.arc(0, my - 1.5, 4, Math.PI * 0.15, Math.PI * 0.85);
+      else if (mood === 'sad') ctx2.arc(0, my + 2.5, 4, Math.PI * 1.15, Math.PI * 1.85);
       else {
         ctx2.moveTo(-3.4, my);
         ctx2.lineTo(3.4, my);
@@ -388,7 +556,7 @@ export function showWorldMap2D(
     ctx2.restore();
   }
 
-  /** 静态手绘点缀：小新芽 × 2 + 云一朵（位置锚定白板边缘） */
+  /** 静态手绘点缀：小新芽 × 2（云朵移交 drawCloud，悬在小生物头顶可点击降雨） */
   function drawDoodles(ctx2: CanvasRenderingContext2D): void {
     ctx2.save();
     ctx2.strokeStyle = PAPER.ink;
@@ -411,18 +579,6 @@ export function showWorldMap2D(
       ctx2.fill();
       ctx2.stroke();
     }
-    // 云（右上，柔和游移）
-    const cy = bounds.minZ + 40 + Math.sin(performance.now() / 4200) * 3;
-    const cx = bounds.maxX - 62 + Math.sin(performance.now() / 6800) * 6;
-    ctx2.beginPath();
-    ctx2.arc(cx, cy, 9, Math.PI * 0.5, Math.PI * 1.5);
-    ctx2.arc(cx + 9, cy - 9, 10, Math.PI, Math.PI * 1.9);
-    ctx2.arc(cx + 22, cy - 6, 8, Math.PI * 1.2, Math.PI * 1.98);
-    ctx2.arc(cx + 26, cy, 7, Math.PI * 1.5, Math.PI * 0.5);
-    ctx2.closePath();
-    ctx2.fillStyle = '#FFFFFF';
-    ctx2.fill();
-    ctx2.stroke();
     ctx2.restore();
   }
 
@@ -470,6 +626,13 @@ export function showWorldMap2D(
   // ---- 点击 ----
   function onClick(e: MouseEvent): void {
     const [wx, wz] = screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
+    // 云朵优先：点云触发雨云小剧场
+    const now = performance.now();
+    const cp = cloudPos(now);
+    if (inCloudHitbox(wx, wz, cp.cx, cp.cy)) {
+      triggerRain(now);
+      return;
+    }
     const idx = findVaultAt(wx, wz);
     if (idx < 0) return;
     const vault = vaults[idx];
@@ -489,6 +652,10 @@ export function showWorldMap2D(
   function onMouseMove(e: MouseEvent): void {
     const [wx, wz] = screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     mouseWorld = [wx, wz]; // 居民目光跟随
+    // 云朵可点提示：仅 idle 时显示手型（雨中/晴天点了也无效）
+    const cp = cloudPos(performance.now());
+    canvas.style.cursor =
+      weather.phase === 'idle' && inCloudHitbox(wx, wz, cp.cx, cp.cy) ? 'pointer' : 'default';
     const idx = findVaultAt(wx, wz);
     if (idx < 0) {
       tooltip.style.display = 'none';
@@ -523,10 +690,14 @@ export function showWorldMap2D(
     // 背景（在世界坐标下绘制）
     drawBackground(ctx, bounds);
 
-    // 手绘点缀 + 城邦居民（画在印章之下，不遮挡城邦）
-    drawDoodles(ctx);
+    // 手绘点缀 + 雨云小剧场 + 城邦居民（画在印章之下，不遮挡城邦）
     const nowMs = performance.now();
+    tickWeather(weather, nowMs);
+    drawDoodles(ctx);
+    drawCloud(ctx, nowMs);
+    drawSun(ctx, nowMs);
     for (let ci = 0; ci < CRITTERS.length; ci++) drawCritter(ctx, CRITTERS[ci], ci, nowMs);
+    drawRain(ctx, nowMs); // 雨丝盖在小生物身上，营造「淋在身上」
 
     // 贸易路线（环形虚线，主题次要色）
     if (vaults.length > 1) {
@@ -600,6 +771,9 @@ export function showWorldMap2D(
   window.addEventListener('resize', onResize);
 
   return {
+    startRain(): void {
+      triggerRain(performance.now());
+    },
     dispose(): void {
       cancelAnimationFrame(animId);
       canvas.removeEventListener('click', onClick);
