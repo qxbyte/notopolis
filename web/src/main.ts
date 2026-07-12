@@ -1,7 +1,8 @@
 import './ui/style.css';
+import { initTheme } from './ui/theme';
 import { fetchWorld, fetchCity, fetchVisitSummary, connectWS } from './api';
 import type { WorldVault } from './api';
-import { showHome, showOnboarding } from './ui/onboarding';
+import { createSettingsHub } from './ui/settingshub';
 import { showWorldMap2D } from './views/worldmap2d';
 import { showCity2D } from './views/cityview2d';
 import type { CityViewHandle } from './views/cityview2d';
@@ -9,8 +10,7 @@ import { closeTopOverlay, clearOverlays } from './ui/overlaystack';
 import { summarize, showBanner } from './ui/banner';
 import type { CityDiff } from '@shared/types';
 
-// 保留 showOnboarding 引用避免 tree-shake 删掉（向后兼容）
-void showOnboarding;
+initTheme(); // 恢复上次选择的主题（须在任何 UI 创建前）
 
 const container = document.createElement('div');
 container.style.cssText = 'position:fixed;inset:0;overflow:hidden;';
@@ -22,9 +22,14 @@ let navigating = false;
 let currentBanner: { dispose(): void } | null = null;
 let lastDiff: CityDiff | null = null;
 
+// 全局常驻设置中心弹窗：左侧菜单（配置仓库/配置模型），右侧内容
+const settingsHub = createSettingsHub(container);
+// 仓库增删后世界地图就地刷新（不关弹窗、不清浮层）
+settingsHub.onVaultsChanged = () => void refreshWorldMap();
+
 // 调试对象（在每次视图切换时更新）
 const __notopolis: {
-  view: 'onboarding' | 'worldmap' | 'city';
+  view: 'worldmap' | 'city';
   pickables: number;
   enterCity: (vaultId: string) => void;
   pickBuilding: (index: number) => void;
@@ -32,7 +37,7 @@ const __notopolis: {
   centerOn: (x: number, z: number, zoomPx: number) => void;
   pois: { x: number; z: number; r: number; kind: string }[];
 } = {
-  view: 'onboarding',
+  view: 'worldmap',
   pickables: 0,
   enterCity,
   pickBuilding: (_index: number) => { /* 初始化前无操作 */ },
@@ -81,12 +86,8 @@ async function showVisitSummary(vaultId: string, handle: CityViewHandle): Promis
   }
 }
 
-function goHome(): void {
-  clearCurrent();
-  __notopolis.view = 'onboarding';
-  current = showHome(container, {
-    onEnter: goWorldMap,
-  });
+function mountWorldMap(vaults: WorldVault[]): { dispose(): void } {
+  return showWorldMap2D(container, vaults, (v) => goCity(v, false, true), () => settingsHub.open());
 }
 
 async function goWorldMap(): Promise<void> {
@@ -95,13 +96,24 @@ async function goWorldMap(): Promise<void> {
   try {
     clearCurrent();
     const { vaults } = await fetchWorld();
-    current = showWorldMap2D(container, vaults, (v) => goCity(v, false, true), goHome);
+    current = mountWorldMap(vaults);
     __notopolis.view = 'worldmap';
     __notopolis.pickables = 0;
     __notopolis.pickBuilding = (_index: number) => { /* worldmap 视图无建筑拾取 */ };
+    // 世界还没有任何城邦：直接弹出设置中心的「配置仓库」引导添加
+    if (vaults.length === 0) settingsHub.open('vaults');
   } finally {
     navigating = false;
   }
+}
+
+/** 仓库增删后的就地刷新：只重建地图画布，保留打开中的弹窗/浮层 */
+async function refreshWorldMap(): Promise<void> {
+  if (navigating || __notopolis.view !== 'worldmap') return;
+  const { vaults } = await fetchWorld();
+  if (__notopolis.view !== 'worldmap') return; // 拉取期间可能已进城
+  current?.dispose();
+  current = mountWorldMap(vaults);
 }
 
 async function goCity(
@@ -137,6 +149,9 @@ async function goCity(
     dbg.openTaskPanel = () => cityHandle.openTaskPanel();
     dbg.closeTaskPanel = () => cityHandle.closeTaskPanel();
     dbg.taskPanelOpen = () => cityHandle.taskPanelOpen();
+    dbg.toggleDocPanel = () => cityHandle.toggleDocPanel();
+    dbg.docPanelOpen = () => cityHandle.docPanelOpen();
+    dbg.vectorMarkCount = () => cityHandle.vectorMarkCount();
     dbg.locate = (p: string) => cityHandle.locate(p);
     dbg.visitSummary = () => lastDiff;
     dbg.setLens = (id: string) => cityHandle.setLens(id as never);
@@ -152,8 +167,8 @@ async function goCity(
 }
 
 async function init(): Promise<void> {
-  // 首页固定为仓库管理页，不再判断 vaults.length
-  goHome();
+  // 世界地图即首页；无仓库时 goWorldMap 内部会自动弹出仓库管理
+  await goWorldMap();
 }
 
 document.addEventListener('keydown', (e) => {

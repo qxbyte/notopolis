@@ -1,4 +1,15 @@
-import type { CityDiff, CityModel, VaultConfig } from '@shared/types';
+import type {
+  CityDiff,
+  CityModel,
+  RagAnswer,
+  RagChunkInfo,
+  RagConfig,
+  RagDocStatus,
+  RagHit,
+  RagIndexProgress,
+  RagStats,
+  VaultConfig,
+} from '@shared/types';
 
 export type WorldVault = VaultConfig & {
   noteCount: number;
@@ -65,6 +76,111 @@ export async function addVault(name: string, path: string, theme: string): Promi
 
 export async function removeVault(id: string): Promise<void> {
   await apiFetch(`/api/vaults/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// RAG（向量检索）API —— 全部端点可降级：未配置时服务端返回 400 中文原因，
+// 调用方捕获后按松耦合原则回退（不影响原有功能）。
+// ---------------------------------------------------------------------------
+
+async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+}
+
+const jsonInit = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+export function ragGetConfig(): Promise<RagConfig> {
+  return apiJson('/api/rag/config');
+}
+
+export function ragSaveConfig(cfg: RagConfig): Promise<RagConfig> {
+  return apiJson('/api/rag/config', jsonInit('PUT', cfg));
+}
+
+export function ragTest(
+  target: 'embedding' | 'chat',
+): Promise<{ ok: boolean; dims?: number; reply?: string; error?: string }> {
+  return apiJson('/api/rag/test', jsonInit('POST', { target }));
+}
+
+export async function ragDocs(vaultId: string): Promise<RagDocStatus[]> {
+  const data = await apiJson<{ docs: RagDocStatus[] }>(`/api/rag/${vaultId}/docs`);
+  return data.docs;
+}
+
+export function ragIndex(vaultId: string, paths?: string[]): Promise<{ started: boolean; total: number }> {
+  return apiJson(`/api/rag/${vaultId}/index`, jsonInit('POST', paths?.length ? { paths } : {}));
+}
+
+export function ragProgress(vaultId: string): Promise<RagIndexProgress> {
+  return apiJson(`/api/rag/${vaultId}/index/progress`);
+}
+
+export function ragRemoveDoc(vaultId: string, path: string): Promise<{ ok: boolean }> {
+  return apiJson(`/api/rag/${vaultId}/doc?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+}
+
+export function ragStats(vaultId: string): Promise<RagStats> {
+  return apiJson(`/api/rag/${vaultId}/stats`);
+}
+
+export async function ragDocChunks(vaultId: string, path: string): Promise<RagChunkInfo[]> {
+  const data = await apiJson<{ chunks: RagChunkInfo[] }>(
+    `/api/rag/${vaultId}/doc/chunks?path=${encodeURIComponent(path)}`,
+  );
+  return data.chunks;
+}
+
+export function ragClearStore(vaultId: string): Promise<{ ok: boolean }> {
+  return apiJson(`/api/rag/${vaultId}/store`, { method: 'DELETE' });
+}
+
+export async function ragSearch(vaultId: string, q: string): Promise<RagHit[]> {
+  const data = await apiJson<{ hits: RagHit[] }>(
+    `/api/rag/${vaultId}/search?q=${encodeURIComponent(q)}`,
+  );
+  return data.hits;
+}
+
+export function ragAsk(vaultId: string, question: string): Promise<RagAnswer> {
+  return apiJson(`/api/rag/${vaultId}/ask`, jsonInit('POST', { question }));
+}
+
+export function ragFeedback(
+  vaultId: string,
+  ev: { kind: 'up' | 'down' | 'followup' | 'rewrite'; question: string; answer?: string; citations?: string[]; comment?: string },
+): Promise<{ ok: boolean }> {
+  return apiJson(`/api/rag/${vaultId}/feedback`, jsonInit('POST', ev));
+}
+
+export function ragFeedbackStats(vaultId: string): Promise<{
+  total: number;
+  byKind: Record<'up' | 'down' | 'followup' | 'rewrite', number>;
+  recentDown: { ts: number; question: string }[];
+}> {
+  return apiJson(`/api/rag/${vaultId}/feedback/stats`);
+}
+
+export function ragEvalRun(vaultId: string): Promise<{
+  caseCount: number;
+  draftCount: number;
+  recallAtK: number;
+  mrr: number;
+  answerOkRate: number | null;
+  citationPrecision: number | null;
+}> {
+  return apiJson(`/api/rag/${vaultId}/eval/run`, jsonInit('POST', {}));
+}
+
+export function ragEvalFromFeedback(vaultId: string): Promise<{ added: number }> {
+  return apiJson(`/api/rag/${vaultId}/eval/from-feedback`, jsonInit('POST', {}));
 }
 
 // ---------------------------------------------------------------------------

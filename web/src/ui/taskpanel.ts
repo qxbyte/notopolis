@@ -27,7 +27,6 @@ export function createTaskPanel(
   container: HTMLElement,
   opts: {
     onLocate: (notePath: string) => void;
-    obsidianHref: (notePath: string) => string;
   },
 ): TaskPanel {
   const panel = createSidePanel(container, '工地清单');
@@ -41,10 +40,9 @@ export function createTaskPanel(
       fhead.parentElement?.classList.toggle('collapsed');
       return;
     }
-    const row = el.closest<HTMLElement>('.panel-item');
-    if (!row) return;
-    const notePath = row.getAttribute('data-path');
-    if (notePath && el.classList.contains('act-locate')) opts.onLocate(notePath);
+    // 点击文档行即定位（无独立按钮）
+    const notePath = el.closest<HTMLElement>('.panel-item')?.getAttribute('data-path');
+    if (notePath) opts.onLocate(notePath);
   }
   body.addEventListener('click', onBodyClick);
 
@@ -61,8 +59,6 @@ export function createTaskPanel(
       return (
         `<div class="panel-item tree-leaf" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}" style="padding-left:${pad}px">` +
         `<span class="grow"><span class="pi-icon">${ICON.tasks}</span>${esc(leaf.name)} · ${it.openTasks} 项</span>` +
-        `<span class="act act-locate">定位</span>` +
-        `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
         `</div>`
       );
     });

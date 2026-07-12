@@ -5,18 +5,13 @@
 
 import { PAPER } from '../render2d/sketch';
 import { TIER } from '../ui/hud';
-import { rng0 } from '../util/seed';
 import type { WorldVault } from '../api';
 
-/* ------------------------------------------------------------------ */
-/* 预生成噪点坐标（模块内一次，绑定到 [0,1) 均匀分布，绘制时缩放到 bounds）  */
-/* ------------------------------------------------------------------ */
-const NOISE_COUNT = 1200;
-const _noiseRng = rng0('worldmap:noise');
-const _noiseCoords: [number, number][] = Array.from({ length: NOISE_COUNT }, () => [
-  _noiseRng(),
-  _noiseRng(),
-]);
+/** 读主题令牌（世界地图背景跟随六套主题换肤；每帧读取，主题切换即时生效） */
+function themeVar(name: string, fallback: string): string {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 export interface WorldMap2DHandle {
   dispose(): void;
@@ -158,6 +153,11 @@ function drawStamp(
   ctx.restore();
 }
 
+/**
+ * 世界地图背景：现代画布风（与 UI 主题令牌联动）——
+ * 主题底色 + 点阵网格（设计工具质感）+ 中央圆角白板承载城邦印章。
+ * 城邦印章本身保留手绘风：它们是通往手绘城市世界的入口。
+ */
 function drawBackground(
   ctx: CanvasRenderingContext2D,
   bounds: { minX: number; minZ: number; maxX: number; maxZ: number },
@@ -165,70 +165,63 @@ function drawBackground(
   const { minX, minZ, maxX, maxZ } = bounds;
   const w = maxX - minX;
   const h = maxZ - minZ;
+  const bg = themeVar('--bg', '#F2F3F6');
+  const surface = themeVar('--surface', '#FFFFFF');
+  const border = themeVar('--border', '#E5E7EB');
 
-  // 羊皮纸底色
-  ctx.fillStyle = PAPER.paper;
+  // 页面底色
+  ctx.fillStyle = bg;
   ctx.fillRect(minX, minZ, w, h);
 
-  // 轻微噪点质感（使用预生成的确定性坐标，避免每帧闪烁）
-  ctx.fillStyle = 'rgba(90,80,60,0.03)';
-  for (let i = 0; i < NOISE_COUNT; i++) {
-    const nx = minX + _noiseCoords[i][0] * w;
-    const nz = minZ + _noiseCoords[i][1] * h;
-    ctx.fillRect(nx, nz, 1, 1);
-  }
+  // 中央圆角白板（软投影 + 细描边）
+  const inset = 14;
+  const r = 16;
+  const bx = minX + inset;
+  const bz = minZ + inset;
+  const bw = w - inset * 2;
+  const bh = h - inset * 2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(22, 24, 26, 0.10)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 8;
+  ctx.beginPath();
+  ctx.roundRect(bx, bz, bw, bh, r);
+  ctx.fillStyle = surface;
+  ctx.fill();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.roundRect(bx, bz, bw, bh, r);
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
 
-  // 四角斜线装饰
-  const hatchSize = 30;
-  ctx.strokeStyle = PAPER.inkFaded;
-  ctx.lineWidth = 0.8;
-
-  // 左上角
-  for (let i = 0; i < 6; i++) {
-    const o = i * 5;
-    ctx.beginPath();
-    ctx.moveTo(minX + o, minZ + hatchSize);
-    ctx.lineTo(minX + hatchSize, minZ + o);
-    ctx.stroke();
+  // 白板内点阵网格（Figma/白板工具质感）
+  ctx.fillStyle = border;
+  const step = 20;
+  const pad = 14;
+  for (let x = bx + pad; x < bx + bw - pad / 2; x += step) {
+    for (let z = bz + pad; z < bz + bh - pad / 2; z += step) {
+      ctx.beginPath();
+      ctx.arc(x, z, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  // 右上角
-  for (let i = 0; i < 6; i++) {
-    const o = i * 5;
-    ctx.beginPath();
-    ctx.moveTo(maxX - o, minZ + hatchSize);
-    ctx.lineTo(maxX - hatchSize, minZ + o);
-    ctx.stroke();
-  }
-  // 左下角
-  for (let i = 0; i < 6; i++) {
-    const o = i * 5;
-    ctx.beginPath();
-    ctx.moveTo(minX + o, maxZ - hatchSize);
-    ctx.lineTo(minX + hatchSize, maxZ - o);
-    ctx.stroke();
-  }
-  // 右下角
-  for (let i = 0; i < 6; i++) {
-    const o = i * 5;
-    ctx.beginPath();
-    ctx.moveTo(maxX - o, maxZ - hatchSize);
-    ctx.lineTo(maxX - hatchSize, maxZ - o);
-    ctx.stroke();
-  }
-
-  // 外框粗线
-  ctx.strokeStyle = PAPER.roadEdge;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(minX + 8, minZ + 8, w - 16, h - 16);
 }
 
 export function showWorldMap2D(
   container: HTMLElement,
   vaults: WorldVault[],
   onEnterCity: (vault: WorldVault) => void,
-  onManage?: () => void,
+  onSettings?: () => void,
 ): WorldMap2DHandle {
+  // 白板世界范围：高固定 400 单位，宽比正方形略宽（上限 1.25，不追满屏）
   const bounds = { minX: -200, minZ: -200, maxX: 200, maxZ: 200 };
+  function computeBounds(): void {
+    const aspect = Math.min(1.25, Math.max(0.8, container.clientWidth / Math.max(1, container.clientHeight)));
+    bounds.minX = -200 * aspect;
+    bounds.maxX = 200 * aspect;
+  }
+  computeBounds();
 
   // ---- 全屏 canvas ----
   const dpr = window.devicePixelRatio || 1;
@@ -240,16 +233,15 @@ export function showWorldMap2D(
 
   const ctx = canvas.getContext('2d')!;
 
-  // ---- 仓库管理按钮 ----
-  let manageBtn: HTMLButtonElement | null = null;
-  const onManageBtnClick = () => onManage?.();
-  if (onManage) {
-    manageBtn = document.createElement('button');
-    manageBtn.id = 'manage-btn';
-    manageBtn.textContent = '⚙ 仓库管理';
-    // 样式统一走 style.css 的 #manage-btn（纸片按钮）
-    manageBtn.addEventListener('click', onManageBtnClick);
-    container.appendChild(manageBtn);
+  // ---- 设置按钮（右上）：打开设置中心弹窗（内含配置仓库/配置模型菜单） ----
+  let settingsBtn: HTMLButtonElement | null = null;
+  const onSettingsBtnClick = (): void => onSettings?.();
+  if (onSettings) {
+    settingsBtn = document.createElement('button');
+    settingsBtn.id = 'settings-btn';
+    settingsBtn.textContent = '⚙ 设置';
+    settingsBtn.addEventListener('click', onSettingsBtnClick);
+    container.appendChild(settingsBtn);
   }
 
   // ---- 固定视角（无缩放/平移）：contain 适配窗口，一屏展示全貌 ----
@@ -279,6 +271,160 @@ export function showWorldMap2D(
       z: Math.sin(angle) * radius,
     };
   });
+
+  // ---- 城邦居民（装饰动画层）：手绘小生物，瞳孔跟随鼠标 + 眨眼 + 呼吸 + 弹跳入场 ----
+  // 纯装饰不参与命中检测；眨眼节奏用 Math.random（表现层豁免确定性铁律）
+  interface Critter {
+    kind: 'dome' | 'rect';
+    xOff: number; // 距白板左缘的偏移（锚定角落，白板宽度自适应时跟随）
+    w: number;
+    h: number;
+    fill: string;
+    sclera: boolean; // 深色身体需要白眼底
+    delay: number; // 入场延迟 ms
+    phase: number; // 呼吸相位
+    mouth: 'smile' | 'flat' | 'none';
+  }
+  const CRITTERS: Critter[] = [
+    { kind: 'rect', xOff: 88, w: 34, h: 76, fill: '#A9BCF5', sclera: false, delay: 0, phase: 0.5, mouth: 'none' },
+    { kind: 'rect', xOff: 114, w: 28, h: 58, fill: '#3A3428', sclera: true, delay: 140, phase: 2.1, mouth: 'none' },
+    { kind: 'dome', xOff: 60, w: 54, h: 42, fill: '#F2A65C', sclera: false, delay: 280, phase: 3.6, mouth: 'smile' },
+    { kind: 'dome', xOff: 140, w: 40, h: 34, fill: '#DCF231', sclera: false, delay: 420, phase: 5.2, mouth: 'flat' },
+  ];
+  const critterBlink = CRITTERS.map(() => ({ until: 0, next: performance.now() + 1200 + Math.random() * 2600 }));
+  const mountAt = performance.now();
+  let mouseWorld: [number, number] | null = null;
+
+  const easeOutBack = (p: number): number => {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+  };
+
+  function drawCritter(ctx2: CanvasRenderingContext2D, c: Critter, idx: number, now: number): void {
+    const cx = bounds.minX + c.xOff;
+    const ground = bounds.maxZ - 30;
+    // 入场弹跳（各自延迟）
+    const p = Math.min(1, Math.max(0, (now - mountAt - c.delay) / 480));
+    if (p <= 0) return;
+    const appear = easeOutBack(p);
+    // 呼吸：轻微纵向缩放（以地面为锚点）
+    const breath = 1 + 0.022 * Math.sin(now / 520 + c.phase);
+    ctx2.save();
+    ctx2.translate(cx, ground);
+    ctx2.scale(appear * (2 - breath), appear * breath);
+
+    // 身体（墨线描边，手绘同源）
+    ctx2.lineWidth = 1.6;
+    ctx2.strokeStyle = PAPER.ink;
+    ctx2.fillStyle = c.fill;
+    ctx2.beginPath();
+    if (c.kind === 'dome') {
+      ctx2.ellipse(0, 0, c.w / 2, c.h, 0, Math.PI, Math.PI * 2);
+      ctx2.closePath();
+    } else {
+      ctx2.roundRect(-c.w / 2, -c.h, c.w, c.h, [10, 10, 3, 3]);
+    }
+    ctx2.fill();
+    ctx2.stroke();
+
+    // 眼睛：瞳孔朝向鼠标（无鼠标时缓慢游移）
+    const eyeY = -c.h * (c.kind === 'dome' ? 0.52 : 0.72);
+    const eyeDx = c.w * 0.18;
+    const blink = critterBlink[idx];
+    if (now > blink.next) {
+      blink.until = now + 130;
+      blink.next = now + 1600 + Math.random() * 3200;
+    }
+    const blinking = now < blink.until;
+    for (const side of [-1, 1]) {
+      const ex = side * eyeDx;
+      if (c.sclera) {
+        ctx2.beginPath();
+        ctx2.arc(ex, eyeY, 4.6, 0, Math.PI * 2);
+        ctx2.fillStyle = '#FFFFFF';
+        ctx2.fill();
+      }
+      if (blinking) {
+        ctx2.beginPath();
+        ctx2.moveTo(ex - 2.6, eyeY);
+        ctx2.lineTo(ex + 2.6, eyeY);
+        ctx2.lineWidth = 1.4;
+        ctx2.strokeStyle = c.sclera ? PAPER.ink : '#20241C';
+        ctx2.stroke();
+      } else {
+        // 目光方向：世界坐标下从眼睛指向鼠标
+        let dx = 0;
+        let dz = 0;
+        if (mouseWorld) {
+          dx = mouseWorld[0] - (cx + ex);
+          dz = mouseWorld[1] - (ground + eyeY);
+        } else {
+          dx = Math.sin(now / 2400 + c.phase);
+          dz = Math.cos(now / 3100 + c.phase);
+        }
+        const len = Math.hypot(dx, dz) || 1;
+        const off = 1.9;
+        ctx2.beginPath();
+        ctx2.arc(ex + (dx / len) * off, eyeY + (dz / len) * off, 2.1, 0, Math.PI * 2);
+        ctx2.fillStyle = c.sclera ? PAPER.ink : '#20241C';
+        ctx2.fill();
+      }
+    }
+
+    // 嘴
+    if (c.mouth !== 'none') {
+      ctx2.beginPath();
+      ctx2.lineWidth = 1.3;
+      ctx2.strokeStyle = PAPER.ink;
+      const my = eyeY + c.h * 0.22;
+      if (c.mouth === 'smile') ctx2.arc(0, my - 1.5, 4, Math.PI * 0.15, Math.PI * 0.85);
+      else {
+        ctx2.moveTo(-3.4, my);
+        ctx2.lineTo(3.4, my);
+      }
+      ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+
+  /** 静态手绘点缀：小新芽 × 2 + 云一朵（位置锚定白板边缘） */
+  function drawDoodles(ctx2: CanvasRenderingContext2D): void {
+    ctx2.save();
+    ctx2.strokeStyle = PAPER.ink;
+    ctx2.lineWidth = 1.2;
+    ctx2.lineCap = 'round';
+    const sprouts: Array<[number, number]> = [
+      [bounds.minX + 176, bounds.maxZ - 32],
+      [bounds.minX + 22, bounds.maxZ - 34],
+    ];
+    for (const [sx, sz] of sprouts) {
+      ctx2.beginPath();
+      ctx2.moveTo(sx, sz);
+      ctx2.quadraticCurveTo(sx + 1, sz - 6, sx, sz - 10);
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.moveTo(sx, sz - 7);
+      ctx2.quadraticCurveTo(sx - 6, sz - 10, sx - 5, sz - 15);
+      ctx2.quadraticCurveTo(sx + 1, sz - 12, sx, sz - 7);
+      ctx2.fillStyle = '#DCF231';
+      ctx2.fill();
+      ctx2.stroke();
+    }
+    // 云（右上，柔和游移）
+    const cy = bounds.minZ + 40 + Math.sin(performance.now() / 4200) * 3;
+    const cx = bounds.maxX - 62 + Math.sin(performance.now() / 6800) * 6;
+    ctx2.beginPath();
+    ctx2.arc(cx, cy, 9, Math.PI * 0.5, Math.PI * 1.5);
+    ctx2.arc(cx + 9, cy - 9, 10, Math.PI, Math.PI * 1.9);
+    ctx2.arc(cx + 22, cy - 6, 8, Math.PI * 1.2, Math.PI * 1.98);
+    ctx2.arc(cx + 26, cy, 7, Math.PI * 1.5, Math.PI * 0.5);
+    ctx2.closePath();
+    ctx2.fillStyle = '#FFFFFF';
+    ctx2.fill();
+    ctx2.stroke();
+    ctx2.restore();
+  }
 
   // ---- 悬停标签 ----
   const tooltip = document.createElement('div');
@@ -342,6 +488,7 @@ export function showWorldMap2D(
   // ---- Hover ----
   function onMouseMove(e: MouseEvent): void {
     const [wx, wz] = screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
+    mouseWorld = [wx, wz]; // 居民目光跟随
     const idx = findVaultAt(wx, wz);
     if (idx < 0) {
       tooltip.style.display = 'none';
@@ -366,8 +513,8 @@ export function showWorldMap2D(
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // 先以纸底色填满整个 canvas，世界图边界外也是纸面
-    ctx.fillStyle = PAPER.paper;
+    // 先以主题底色填满整个 canvas（世界图边界外同底色，无缝延伸）
+    ctx.fillStyle = themeVar('--bg', '#F2F3F6');
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // 应用固定变换（世界原点居中，contain 缩放）
@@ -376,10 +523,16 @@ export function showWorldMap2D(
     // 背景（在世界坐标下绘制）
     drawBackground(ctx, bounds);
 
-    // 贸易路线（环形虚线）
+    // 手绘点缀 + 城邦居民（画在印章之下，不遮挡城邦）
+    drawDoodles(ctx);
+    const nowMs = performance.now();
+    for (let ci = 0; ci < CRITTERS.length; ci++) drawCritter(ctx, CRITTERS[ci], ci, nowMs);
+
+    // 贸易路线（环形虚线，主题次要色）
     if (vaults.length > 1) {
-      ctx.strokeStyle = '#D4A76A';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = themeVar('--muted', '#84898F');
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1.2;
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
       for (let i = 0; i < vaults.length; i++) {
@@ -390,6 +543,23 @@ export function showWorldMap2D(
       }
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    // 空状态：还没有仓库时给出指引
+    if (vaults.length === 0) {
+      const hintPx = 19 * dpr;
+      const uiFont = `-apple-system, 'PingFang SC', 'Segoe UI', sans-serif`;
+      ctx.save();
+      ctx.scale(1 / scale, 1 / scale);
+      ctx.font = `600 ${hintPx}px ${uiFont}`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = themeVar('--text', '#16181A');
+      ctx.fillText('世界还是一片空白', 0, -hintPx * 0.4);
+      ctx.font = `${hintPx * 0.68}px ${uiFont}`;
+      ctx.fillStyle = themeVar('--muted', '#84898F');
+      ctx.fillText('点击右上「⚙ 设置 → 配置仓库」，添加你的第一座 Obsidian 城邦', 0, hintPx);
+      ctx.restore();
     }
 
     // 城邦印章
@@ -398,19 +568,19 @@ export function showWorldMap2D(
       drawStamp(ctx, pos.x, pos.z, vaults[i]);
 
       // 城邦名称标签（印章下方；逆缩放绘制，字号按 CSS 像素 × dpr 保证清晰可读）
-      const labelPx = 18 * dpr;
+      const labelPx = 15 * dpr;
       ctx.save();
       ctx.translate(pos.x, pos.z);
       ctx.scale(1 / scale, 1 / scale);
-      ctx.font = `600 ${labelPx}px 'Hannotate SC', 'Xingkai SC', 'Kaiti SC', cursive`;
+      ctx.font = `600 ${labelPx}px -apple-system, 'PingFang SC', 'Segoe UI', sans-serif`;
       ctx.textAlign = 'center';
       const stampH = hitRadius(vaults[i].tier) + 6;
       const labelY = stampH * scale + labelPx * 0.4;
-      // 纸色描边打底，避免与贸易路线虚线交叠时看不清
-      ctx.strokeStyle = PAPER.paper;
-      ctx.lineWidth = labelPx * 0.22;
+      // 表面色描边打底，避免与贸易路线虚线交叠时看不清
+      ctx.strokeStyle = themeVar('--surface', '#FFFFFF');
+      ctx.lineWidth = labelPx * 0.25;
       ctx.strokeText(vaults[i].name, 0, labelY);
-      ctx.fillStyle = PAPER.ink;
+      ctx.fillStyle = themeVar('--text', '#16181A');
       ctx.fillText(vaults[i].name, 0, labelY);
       ctx.restore();
     }
@@ -424,6 +594,7 @@ export function showWorldMap2D(
   function onResize(): void {
     canvas.width  = container.clientWidth  * dpr;
     canvas.height = container.clientHeight * dpr;
+    computeBounds();
     computeTransform();
   }
   window.addEventListener('resize', onResize);
@@ -438,10 +609,10 @@ export function showWorldMap2D(
       tooltip.remove();
       errTip.remove();
       if (errTipTimer) clearTimeout(errTipTimer);
-      if (manageBtn) {
-        manageBtn.removeEventListener('click', onManageBtnClick);
-        manageBtn.remove();
-        manageBtn = null;
+      if (settingsBtn) {
+        settingsBtn.removeEventListener('click', onSettingsBtnClick);
+        settingsBtn.remove();
+        settingsBtn = null;
       }
     },
   };

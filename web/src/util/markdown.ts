@@ -1,6 +1,6 @@
 /**
  * util/markdown.ts — 轻量 Markdown → HTML 渲染（无外部依赖）。
- * 覆盖知识笔记常见语法：标题/粗斜体/行内与块级代码/列表/任务/引用/分隔线/链接/wikilink/图片。
+ * 覆盖知识笔记常见语法：标题/粗斜体/行内与块级代码/列表/任务/引用/分隔线/链接/wikilink/图片/表格。
  * 输出前已转义，安全用于 innerHTML。纯函数，可单测。
  */
 
@@ -10,8 +10,10 @@ function escapeHtml(s: string): string {
   );
 }
 
-/** 处理非代码文本的行内语法：图片 > 链接 > wikilink > 粗 > 斜 */
+/** 处理非代码文本的行内语法：图片 > 链接 > wikilink > 高亮 > 粗 > 斜 */
 function inlineNonCode(s: string): string {
+  // 高亮 ==text==（Obsidian 语法）
+  s = s.replace(/==([^=]+)==/g, '<mark class="md-mark">$1</mark>');
   // 图片 ![alt](url)
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, url) => `<img alt="${alt}" src="${url}">`);
   // 链接 [text](url)
@@ -114,6 +116,84 @@ export function renderMarkdown(src: string): string {
       }
       out.push(`<blockquote>${renderInline(quote.join(' '))}</blockquote>`);
       continue;
+    }
+
+    // 表格：宽松于严格 GFM，贴合笔记实际写法——
+    // ① 表头 + 分隔行（| --- | :-: |）+ 数据行；分隔行后允许隔空行再接数据行；
+    // ② 没有分隔行的连续 | 行渲染为无表头表格（严格 GFM 会退化成段落，笔记里常见）；
+    // ③ 行尾竖线可省略（GFM 合法写法），以 | 开头即视为表格行。
+    if (/^\s*\|/.test(line)) {
+      const isRow = (s: string | undefined): boolean => !!s && /^\s*\|/.test(s);
+      const splitRow = (row: string): string[] => {
+        let r = row.trim();
+        if (r.startsWith('|')) r = r.slice(1);
+        if (r.endsWith('|')) r = r.slice(0, -1);
+        return r.split('|').map((c) => c.trim());
+      };
+      const isSepRow = (s: string | undefined): boolean => {
+        if (!isRow(s)) return false;
+        const cells = splitRow(s as string);
+        return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
+      };
+
+      if (isSepRow(lines[i + 1])) {
+        // ① 带表头表格
+        flushPara();
+        const headers = splitRow(line);
+        const sepCells = splitRow(lines[i + 1]);
+        // 对齐：:---: 居中 · ---: 右对齐 · 其余默认左
+        const aligns = sepCells.map((c) =>
+          c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : '',
+        );
+        const alignAttr = (idx: number): string =>
+          aligns[idx] ? ` style="text-align:${aligns[idx]}"` : '';
+        i += 2;
+        const rows: string[][] = [];
+        while (i < lines.length && isRow(lines[i]) && !isSepRow(lines[i])) {
+          rows.push(splitRow(lines[i]));
+          i++;
+        }
+        // 分隔行后隔了空行才接数据行：跳过空行继续归入本表格
+        if (rows.length === 0) {
+          let j = i;
+          while (j < lines.length && /^\s*$/.test(lines[j])) j++;
+          while (j < lines.length && isRow(lines[j]) && !isSepRow(lines[j])) {
+            rows.push(splitRow(lines[j]));
+            j++;
+          }
+          if (rows.length > 0) i = j;
+        }
+        const thead = headers
+          .map((h, idx) => `<th${alignAttr(idx)}>${renderInline(h)}</th>`)
+          .join('');
+        const tbody = rows
+          .map(
+            (r) =>
+              `<tr>${headers.map((_h, idx) => `<td${alignAttr(idx)}>${renderInline(r[idx] ?? '')}</td>`).join('')}</tr>`,
+          )
+          .join('');
+        out.push(`<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`);
+        continue;
+      }
+
+      if (!isSepRow(line)) {
+        // ② 无表头表格：连续 | 行整体成表
+        flushPara();
+        const rows: string[][] = [];
+        while (i < lines.length && isRow(lines[i]) && !isSepRow(lines[i])) {
+          rows.push(splitRow(lines[i]));
+          i++;
+        }
+        const cols = Math.max(...rows.map((r) => r.length));
+        const tbody = rows
+          .map(
+            (r) =>
+              `<tr>${Array.from({ length: cols }, (_v, idx) => `<td>${renderInline(r[idx] ?? '')}</td>`).join('')}</tr>`,
+          )
+          .join('');
+        out.push(`<table><tbody>${tbody}</tbody></table>`);
+        continue;
+      }
     }
 
     // 列表（有序/无序/任务），连续行成组

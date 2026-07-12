@@ -74,12 +74,13 @@ function esc(s: string): string {
 
 /**
  * 渲染目录树为 HTML。folders 默认展开；leafRow 由调用方提供每个叶子的行 HTML。
- * depth 用于缩进。
+ * depth 用于缩进；folderExtra 可为目录行追加动作区（如文档面板的「入库」按钮）。
  */
 export function renderTree<T>(
   node: TreeNode<T>,
   leafRow: (leaf: { name: string; notePath: string; data: T }, depth: number) => string,
   depth = 0,
+  folderExtra?: (node: TreeNode<T>, depth: number) => string,
 ): string {
   let html = '';
   for (const f of node.folders) {
@@ -89,9 +90,10 @@ export function renderTree<T>(
       `<div class="tree-folder-head" style="padding-left:${pad}px">` +
       `<span class="tree-toggle">▾</span>` +
       `<span class="tree-fname">${esc(f.name)}</span>` +
+      (folderExtra ? folderExtra(f, depth) : '') +
       `<span class="tree-count">${f.count}</span>` +
       `</div>` +
-      `<div class="tree-children">${renderTree(f, leafRow, depth + 1)}</div>` +
+      `<div class="tree-children">${renderTree(f, leafRow, depth + 1, folderExtra)}</div>` +
       `</div>`;
   }
   for (const lf of node.leaves) {

@@ -15,46 +15,41 @@ test.beforeAll(() => {
   fs.mkdirSync(artifactsDir, { recursive: true });
 });
 
-test('home → add vault → enter world → city smoke test', async ({ page }) => {
+test('worldmap home → vault modal add → city smoke test', async ({ page }) => {
   const vaultPath = path.join(process.cwd(), 'tests/fixtures/vault-a');
 
-  // ---- 首页（仓库管理页）----
+  // ---- 首页即世界地图 ----
   await page.goto('/');
-
-  // 等待首页标题「NOTOPOLIS」
-  await expect(page.getByText('NOTOPOLIS')).toBeVisible({ timeout: 15000 });
-
-  // 断言「进入世界」按钮存在（初始无 vault，应禁用）
-  const foundBtn = page.locator('#ob-found-btn');
-  await expect(foundBtn).toBeVisible({ timeout: 5000 });
-  await expect(foundBtn).toBeDisabled();
-
-  // 填写 vault 路径
-  await page.fill('#ob-path', vaultPath);
-
-  // 填写城邦名
-  await page.fill('#ob-name', '测试城');
-
-  // 选择主题 plains
-  await page.selectOption('#ob-theme', 'plains');
-
-  // 点击「添加」按钮
-  await page.click('#ob-add-btn');
-
-  // 等待列表出现「测试城」
-  await expect(page.getByText('测试城')).toBeVisible({ timeout: 10000 });
-
-  // 「进入世界」按钮应变为可用
-  await expect(foundBtn).toBeEnabled({ timeout: 5000 });
-
-  // 点击「进入世界」按钮
-  await page.click('#ob-found-btn');
-
-  // 等待 __notopolis.view === 'worldmap'
   await page.waitForFunction(
     () => (window as any).__notopolis?.view === 'worldmap',
     { timeout: 30000 }
   );
+  await expect(page.locator('#settings-btn')).toBeVisible({ timeout: 5000 });
+
+  // 无仓库时设置中心自动打开并停在「配置仓库」
+  await expect(page.locator('.hub-overlay.open')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#ob-add-btn')).toBeVisible();
+
+  // 面板内添加 vault（主题用自定义下拉：展开 → 点选）
+  await page.fill('#ob-path', vaultPath);
+  await page.fill('#ob-name', '测试城');
+  await page.click('#ob-theme .dd-btn');
+  await page.click('#ob-theme .dd-item[data-v="plains"]');
+  await page.click('#ob-add-btn');
+
+  // 列表出现「测试城」
+  await expect(page.locator('.vault-list')).toContainText('测试城', { timeout: 10000 });
+
+  // 切到「配置模型」菜单验证面板切换，再关闭弹窗
+  await page.click('#hub-menu-models');
+  await expect(page.locator('.st-save')).toBeVisible({ timeout: 5000 });
+  await page.click('.hub-modal .note-close');
+  await expect(page.locator('.hub-overlay.open')).toHaveCount(0);
+
+  // 「⚙ 设置」按钮可重开设置中心，再关闭继续流程
+  await page.click('#settings-btn');
+  await expect(page.locator('.hub-overlay.open')).toBeVisible({ timeout: 5000 });
+  await page.click('.hub-modal .note-close');
 
   // ---- 世界地图截图 ----
   // 等待至少 1 帧渲染完成（canvas 非空）

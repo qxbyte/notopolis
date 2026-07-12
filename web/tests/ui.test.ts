@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { esc, createCards } from '../src/ui/cards';
 import { TIER, createHUD } from '../src/ui/hud';
 import type { Building, District } from '@shared/types';
@@ -165,6 +165,21 @@ describe('createCards + showBuilding', () => {
     const card = document.getElementById('card')!;
     const h3 = card.querySelector('h3');
     expect(h3?.textContent).toContain('⭐');
+  });
+
+  it('onLocateList 传入时显示「定位」并触发回调；未传入不显示', () => {
+    const b = makeBuilding({});
+    const onLocateList = vi.fn();
+    cards.showBuilding(b, 'dir', '/vault', undefined, undefined, onLocateList);
+    const card = document.getElementById('card')!;
+    const locateBtn = card.querySelector<HTMLElement>('.card-locate')!;
+    expect(locateBtn.textContent).toContain('定位');
+    expect(locateBtn.querySelector('svg')).toBeTruthy(); // 准星图标
+    locateBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onLocateList).toHaveBeenCalledOnce();
+    // 不带回调重新渲染 → 按钮消失
+    cards.showBuilding(b, 'dir', '/vault');
+    expect(card.querySelector('.card-locate')).toBeNull();
   });
 });
 

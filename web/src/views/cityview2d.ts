@@ -14,13 +14,16 @@ import type { HitItem } from '../render2d/hit';
 import { createHUD, TIER } from '../ui/hud';
 import { createCards } from '../ui/cards';
 import { createNoteModal } from '../ui/notemodal';
-import { fetchNote, saveNote } from '../api';
+import { fetchNote, ragAsk, ragDocs, ragFeedback, ragGetConfig, ragSearch, saveNote } from '../api';
+import { collectVectorMarks, drawBookMark, type VectorMark } from '../render2d/vectormarks';
+import { cssToken } from '../ui/theme';
 import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
 import { createGardenPanel } from '../ui/gardenpanel';
+import { createDocPanel } from '../ui/docpanel';
+import type { RagConfig } from '@shared/types';
 import { listTasks, totalConstruction } from '../util/tasks';
-import { obsidianUri } from '../ui/obsidian';
 import { ICON } from '../ui/icons';
 import { LENSES, lensById, gardenSetOf, lensHitBuildings, type LensId } from '../render2d/lenses';
 import { pickWeightedIndex, staleWeight } from '../util/random';
@@ -62,6 +65,11 @@ export interface CityViewHandle {
   openTaskPanel(): void;
   closeTaskPanel(): void;
   taskPanelOpen(): boolean;
+  /** 打开/关闭文书档案面板（常规按钮） */
+  toggleDocPanel(): void;
+  docPanelOpen(): boolean;
+  /** 已向量化建筑标记数（藏书阁屋顶饰，调试/测试用） */
+  vectorMarkCount(): number;
   /** 切换透镜图层 */
   setLens(id: LensId): void;
   /** 当前透镜命中的 notePath 列表 */
@@ -283,7 +291,24 @@ export function showCity2D(
     saveMarkdown: (vaultId, notePath, md) => saveNote(vaultId, notePath, md),
   });
 
-  // ---- 12b. 搜索（⌘K）----
+  // ---- 12b. 搜索（⌘K）+ RAG 配置状态 ----
+  // ragCfg 异步拉取：失败/未配置时保持 null，一切 RAG 入口按未启用降级（松耦合）
+  let ragCfg: RagConfig | null = null;
+  // 「藏书阁」屋顶饰：已向量化建筑的标记位置（RAG 未启用时保持空，地图与原版一致）
+  let vectorMarks: VectorMark[] = [];
+  void ragGetConfig()
+    .then((c) => {
+      ragCfg = c;
+      if (!c.enabled) return;
+      return ragDocs(vault.id).then((list) => {
+        const indexed = new Set(list.filter((d) => d.state !== 'none').map((d) => d.path));
+        vectorMarks = collectVectorMarks(city, indexed);
+      });
+    })
+    .catch(() => {
+      ragCfg = null;
+    });
+
   const searchItems: SearchItem[] = [];
   for (const { b, dir } of buildingIndex.values()) {
     searchItems.push({ notePath: b.notePath, title: b.title, dir });
@@ -296,20 +321,24 @@ export function showCity2D(
     if (hit.b.landmark) return '⭐ ';
     return '';
   }
-  const searchUI = createSearchUI(container, searchItems, decorate, (notePath) => locate(notePath));
+  const searchUI = createSearchUI(container, searchItems, decorate, (notePath) => locate(notePath), {
+    available: () => ragCfg?.enabled === true,
+    askAvailable: () => ragCfg?.enabled === true && ragCfg.chat.mode !== 'off',
+    search: (q) => ragSearch(vault.id, q),
+    ask: (q) => ragAsk(vault.id, q),
+    feedback: (ev) => void ragFeedback(vault.id, ev).catch(() => undefined),
+  });
 
   const DAY = 86400000;
 
   // ---- 12c. 工地面板（F2）+ 园丁面板（F5）----
   const taskPanel = createTaskPanel(container, {
     onLocate: (notePath) => locate(notePath),
-    obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
   });
   taskPanel.refresh(listTasks(city));
 
   const gardenPanel = createGardenPanel(container, {
     onLocate: (notePath) => locate(notePath),
-    obsidianHref: (notePath) => obsidianUri(vault.path, notePath),
   });
   // 园丁清单：非 civic 中 mtimeMs 最旧 5 栋（用 generatedAt 保持确定性，不取 Date.now）
   const gardenList = city.districts
@@ -334,6 +363,13 @@ export function showCity2D(
     if (lensId === 'garden') setLens('none');
   };
 
+  // ---- 12c2. 文书档案面板（常规按钮）----
+  // 模型/检索设置统一在首页「⚙ 设置 → 配置模型」；进城时已按最新配置拉取 ragCfg
+  const docPanel = createDocPanel(container, {
+    vaultId: vault.id,
+    onLocate: (notePath) => locate(notePath),
+  });
+
   // ---- 12d. 透镜图层（F4/F5）----
   const gardenSet = gardenSetOf(city);
   let lensId: LensId = 'none';
@@ -346,6 +382,7 @@ export function showCity2D(
     // 按钮高亮
     for (const [bid, btn] of lensBtns) btn.classList.toggle('active', bid === id);
     // 面板与透镜联动：tasks↔工地面板、garden↔园丁面板；面板与卡片互斥
+    if (id !== 'none') docPanel.close(); // 文书档案只在常规视图下展开
     if (id === 'tasks') {
       cards.hide();
       taskPanel.open();
@@ -417,15 +454,24 @@ export function showCity2D(
     return blob.size;
   }
 
-  // ---- 12g. 顶部功能按钮栏：搜索 · 漫游 · [常规 · 工地N · 孤岛 · 园丁] ----
-  hud.addButton(`${ICON.search} 搜索`, () => searchUI.open(), '按名字搜索笔记并飞行定位（⌘K / Ctrl+K）');
+  // ---- 12g. 顶部功能按钮栏：搜索 · 漫游 · [常规 · 工地N · 孤岛 · 园丁] · 设置 ----
+  hud.addButton(`${ICON.search} 搜索`, () => searchUI.open(), '按名字/语义搜索笔记，或向知识库提问（⌘K / Ctrl+K）');
   hud.addButton(`${ICON.roam} 漫游`, () => randomWalk(), '随机漫步到一栋冷门老笔记，与旧知识重逢');
   for (const def of LENSES) {
     const label =
       def.id === 'tasks' && constructionN > 0
         ? `${ICON.tasks} 工地 ${constructionN}`
         : `${LENS_ICON[def.id]} ${def.label}`;
-    const btn = hud.addLensButton(label, () => setLens(def.id), LENS_TIPS[def.id]);
+    // 常规按钮：还原透镜并开关「文书档案」面板（全量文档目录 + 向量化入库）
+    const onClick =
+      def.id === 'none'
+        ? () => {
+            setLens('none');
+            cards.hide();
+            docPanel.toggle();
+          }
+        : () => setLens(def.id);
+    const btn = hud.addLensButton(label, onClick, LENS_TIPS[def.id]);
     if (def.id === 'none') btn.classList.add('active');
     lensBtns.set(def.id, btn);
   }
@@ -455,9 +501,31 @@ export function showCity2D(
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // 先以纸底色填满整个 canvas（世界图边界外也是纸面，而不是透明/蓝色）
-    ctx.fillStyle = PAPER.paper;
+    // 「桌面装裱」：主题底色为桌面，城市画在带圆角+投影的图纸内滑动
+    ctx.fillStyle = cssToken('--bg', '#F2F3F6');
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const sheetM = Math.round(12 * dpr);
+    const sheetR = Math.round(16 * dpr);
+    const sheetW = canvas.width - sheetM * 2;
+    const sheetH = canvas.height - sheetM * 2;
+    // 图纸底（软投影 + 描边），世界绘制裁剪在图纸内
+    ctx.save();
+    ctx.shadowColor = 'rgba(22, 24, 26, 0.16)';
+    ctx.shadowBlur = 24 * dpr;
+    ctx.shadowOffsetY = 6 * dpr;
+    ctx.beginPath();
+    ctx.roundRect(sheetM, sheetM, sheetW, sheetH, sheetR);
+    ctx.fillStyle = PAPER.paper;
+    ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.roundRect(sheetM, sheetM, sheetW, sheetH, sheetR);
+    ctx.strokeStyle = cssToken('--border', '#E5E7EB');
+    ctx.lineWidth = dpr;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.roundRect(sheetM, sheetM, sheetW, sheetH, sheetR);
+    ctx.clip();
 
     if (hiValid && camera.zoom > HI_THRESHOLD) {
       // 高清矢量层有效：直接 blit hiCanvas（像素对像素，无缩放）
@@ -473,6 +541,11 @@ export function showCity2D(
 
     // 动态层在 camera transform 下以世界坐标绘制
     dynLayer.draw(ctx, t * 0.001);
+
+    // 「藏书阁」屋顶饰：已向量化建筑标小书（常规视图下绘制，透镜态不干扰高亮）
+    if (lensId === 'none') {
+      for (const m of vectorMarks) drawBookMark(ctx, m.x, m.z);
+    }
 
     // 透镜覆盖层（纸色遮罩压暗全图 + 命中建筑红环，静态层不重绘）
     if (lensId !== 'none') {
@@ -538,13 +611,15 @@ export function showCity2D(
   // ---- 15. 点击 ----
   function onClick(e: MouseEvent): void {
     if (camera.consumeDragMoved()) return;
-    const panelOpen = taskPanel.isOpen() || gardenPanel.isOpen();
+    const panelOpen = taskPanel.isOpen() || gardenPanel.isOpen() || docPanel.isOpen();
     const [wx, wz] = camera.screenToWorld(e.offsetX * dpr, e.offsetY * dpr);
     const item = hitTest(wx, wz, hitItems);
     if (!item) {
       // 空白处：优先收起侧边栏，否则隐藏卡片
-      if (panelOpen) setLens('none');
-      else cards.hide();
+      if (panelOpen) {
+        setLens('none');
+        docPanel.close();
+      } else cards.hide();
       return;
     }
     if (item.kind === 'building') {
@@ -552,7 +627,10 @@ export function showCity2D(
       showBuildingCard(d.b, d.dir); // 内部会收起侧边栏（互斥）
     } else if (item.kind === 'district') {
       const d = item.data as { type: 'district'; district: import('@shared/types').District };
-      if (panelOpen) setLens('none');
+      if (panelOpen) {
+        setLens('none');
+        docPanel.close();
+      }
       cards.showDistrict(d.district, Date.now());
     }
   }
@@ -570,10 +648,20 @@ export function showCity2D(
 
   // 展示建筑卡片（带链接段 + 「打开」弹窗），供点击/搜索/定位/漫游共用
   function showBuildingCard(b: import('@shared/types').Building, dir: string): void {
-    // 卡片与侧边栏互斥：出卡片时先收起工地/园丁面板
+    // 卡片与侧边栏互斥：出卡片时先收起工地/园丁/文书档案面板
     if (taskPanel.isOpen() || gardenPanel.isOpen()) setLens('none');
-    cards.showBuilding(b, dir, vault.path, linksFor(b.notePath), (notePath) =>
-      noteModal.open(vault.id, notePath, b.title),
+    docPanel.close();
+    cards.showBuilding(
+      b,
+      dir,
+      vault.path,
+      linksFor(b.notePath),
+      (notePath) => noteModal.open(vault.id, notePath, b.title),
+      // 通用「定位」：任何来源的卡片都能跳到文书档案列表中的对应位置（带选中色）
+      () => {
+        cards.hide();
+        docPanel.open(b.notePath);
+      },
     );
   }
 
@@ -669,6 +757,17 @@ export function showCity2D(
     taskPanelOpen(): boolean {
       return taskPanel.isOpen();
     },
+    toggleDocPanel(): void {
+      setLens('none');
+      cards.hide();
+      docPanel.toggle();
+    },
+    docPanelOpen(): boolean {
+      return docPanel.isOpen();
+    },
+    vectorMarkCount(): number {
+      return vectorMarks.length;
+    },
 
     setLens(id: LensId): void {
       setLens(id);
@@ -742,6 +841,7 @@ export function showCity2D(
       searchUI.dispose();
       taskPanel.dispose();
       gardenPanel.dispose();
+      docPanel.dispose();
       noteModal.dispose();
       hud.dispose();
       const card = container.querySelector('#card');

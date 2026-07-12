@@ -33,7 +33,6 @@ export function createGardenPanel(
   container: HTMLElement,
   opts: {
     onLocate: (notePath: string) => void;
-    obsidianHref: (notePath: string) => string;
   },
 ): GardenPanel {
   const panel = createSidePanel(container, '园丁 · 该浇水了');
@@ -46,11 +45,9 @@ export function createGardenPanel(
       fhead.parentElement?.classList.toggle('collapsed');
       return;
     }
-    const row = el.closest<HTMLElement>('.panel-item');
-    if (notePathOf(row) && el.classList.contains('act-locate')) opts.onLocate(notePathOf(row)!);
-  }
-  function notePathOf(row: HTMLElement | null): string | null {
-    return row?.getAttribute('data-path') ?? null;
+    // 点击文档行即定位（无独立按钮）
+    const notePath = el.closest<HTMLElement>('.panel-item')?.getAttribute('data-path');
+    if (notePath) opts.onLocate(notePath);
   }
   body.addEventListener('click', onBodyClick);
 
@@ -66,8 +63,6 @@ export function createGardenPanel(
       return (
         `<div class="panel-item tree-leaf" data-path="${esc(it.notePath)}" title="${esc(it.notePath)}" style="padding-left:${pad}px">` +
         `<span class="grow"><span class="pi-icon">${ICON.sprout}</span>${esc(leaf.name)} · ${it.daysSince} 天前</span>` +
-        `<span class="act act-locate">定位</span>` +
-        `<a class="act act-obsidian" href="${esc(opts.obsidianHref(it.notePath))}">↗</a>` +
         `</div>`
       );
     });

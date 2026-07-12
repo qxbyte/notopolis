@@ -4,6 +4,7 @@
  */
 
 import type { Building, District } from '@shared/types';
+import { ICON } from './icons';
 import { obsidianUri } from './obsidian';
 import { renderMarkdown } from '../util/markdown';
 
@@ -33,6 +34,8 @@ export interface CardsHandle {
     vaultAbsPath: string,
     links?: CardLinks,
     onOpen?: (notePath: string) => void,
+    /** 在文书档案列表中定位当前文档（所有来源的卡片通用） */
+    onLocateList?: () => void,
   ): void;
   showDistrict(d: District, now: number): void;
   hide(): void;
@@ -45,12 +48,17 @@ export function createCards(parent: HTMLElement): CardsHandle {
 
   const DAY = 86400000;
 
-  // 当前卡片的回调 + 目标（供链接漫游与「打开」按钮）
+  // 当前卡片的回调 + 目标（供链接漫游与「打开」/「定位」按钮）
   let navHandler: ((path: string) => void) | null = null;
   let openHandler: ((path: string) => void) | null = null;
+  let locateListHandler: (() => void) | null = null;
   let curPath = '';
   function onCardClick(e: MouseEvent): void {
     const el = e.target as HTMLElement;
+    if (el.closest('.card-locate') && locateListHandler) {
+      locateListHandler();
+      return;
+    }
     if (el.closest('.card-open') && openHandler && curPath) {
       openHandler(curPath);
       return;
@@ -87,12 +95,14 @@ export function createCards(parent: HTMLElement): CardsHandle {
       vaultAbsPath: string,
       links?: CardLinks,
       onOpen?: (notePath: string) => void,
+      onLocateList?: () => void,
     ): void {
       const date = new Date(b.mtimeMs).toLocaleDateString('zh-CN');
       const uri = obsidianUri(vaultAbsPath, b.notePath);
       const prefix = b.isCivic ? '🏛 ' : b.landmark ? '⭐ ' : '';
       navHandler = links?.onNavigate ?? null;
       openHandler = onOpen ?? null;
+      locateListHandler = onLocateList ?? null;
       curPath = b.notePath;
       const excerptHtml = b.excerpt ? renderMarkdown(b.excerpt) : '<p>（无摘要）</p>';
       card.innerHTML = `
@@ -102,6 +112,7 @@ export function createCards(parent: HTMLElement): CardsHandle {
         <div class="excerpt md-body">${excerptHtml}</div>
         ${links ? linkSection(links) : ''}
         <div class="actions">
+          ${onLocateList ? `<button class="card-locate" title="在文书档案列表中定位这篇文档">${ICON.locate} 定位</button>` : ''}
           ${onOpen ? '<button class="card-open">打开</button>' : ''}
           <a href="${uri}">在 Obsidian 打开</a>
         </div>`;
