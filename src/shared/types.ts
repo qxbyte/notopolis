@@ -7,6 +7,120 @@ export interface VaultConfig {
 
 export interface AppConfig {
   vaults: VaultConfig[];
+  rag?: RagConfig;
+}
+
+// ---------------------------------------------------------------------------
+// RAG（向量检索）配置——存于 config.json 的 rag 字段；缺省时功能整体关闭，
+// 不影响原有本地搜索（松耦合）。
+// ---------------------------------------------------------------------------
+
+/** OpenAI 兼容端点（本地 Ollama / 云端 DashScope compatible-mode 均适用） */
+export interface RagEndpoint {
+  baseUrl: string;
+  apiKey?: string;
+  model: string;
+}
+
+export interface RagConfig {
+  /** 向量检索总开关：false 时前端不出现语义/问答入口，搜索完全走原逻辑 */
+  enabled: boolean;
+  embedding: {
+    mode: 'local' | 'remote';
+    local: RagEndpoint;
+    remote: RagEndpoint;
+  };
+  /** 问答（生成）模型；mode 为 off 时问答功能隐藏 */
+  chat: {
+    mode: 'off' | 'local' | 'remote';
+    local: RagEndpoint;
+    remote: RagEndpoint;
+  };
+  retrieval: {
+    /** 最终送入上下文的片段数上限 */
+    topK: number;
+    /** 向量余弦相似度阈值（低于此分数的召回丢弃） */
+    minScore: number;
+    /** 单文档最多贡献的片段数（防止一篇长文挤占全部上下文） */
+    perDocLimit: number;
+    /** 上下文字符预算（控制注意力，不让无关内容挤占） */
+    maxContextChars: number;
+    /** 混合检索：BM25 关键词 + 向量语义，RRF 融合重排 */
+    hybrid: boolean;
+  };
+}
+
+/** 单文档的向量索引状态（「常规」文档面板用） */
+export type RagDocState = 'indexed' | 'stale' | 'none';
+
+export interface RagDocStatus {
+  path: string;
+  title: string;
+  state: RagDocState;
+  chunkCount: number;
+  indexedAt: number | null;
+  model: string | null;
+}
+
+/** 入库任务进度（轮询用） */
+export interface RagIndexProgress {
+  running: boolean;
+  total: number;
+  done: number;
+  skipped: number;
+  current: string | null;
+  errors: { path: string; reason: string }[];
+  startedAt: number | null;
+  finishedAt: number | null;
+}
+
+/** 向量库概览（向量库管理页 ① 库概览卡） */
+export interface RagStats {
+  docTotal: number;
+  indexed: number;
+  stale: number;
+  none: number;
+  chunkCount: number;
+  dims: number;
+  model: string | null;
+  /** index.json + vectors.bin 磁盘占用（字节） */
+  bytes: number;
+  lastIndexedAt: number | null;
+  /** 库记录模型 ≠ 当前配置模型（需重建） */
+  modelMismatch: boolean;
+}
+
+/** 单文档切片信息（向量库管理页 ③ 切片检视） */
+export interface RagChunkInfo {
+  index: number;
+  headings: string[];
+  startLine: number;
+  endLine: number;
+  chars: number;
+  hash: string;
+  text: string;
+}
+
+/** 检索命中片段（语义搜索 / 问答证据共用） */
+export interface RagHit {
+  id: string;
+  docPath: string;
+  title: string;
+  headings: string[];
+  startLine: number;
+  endLine: number;
+  text: string;
+  score: number;
+}
+
+export interface RagAnswer {
+  answer: string;
+  refused: boolean;
+  /** 答案中引用的证据序号（1-based，已过滤越界引用） */
+  citations: number[];
+  evidence: RagHit[];
+  /** 生成约束校验警告（如：未附引用） */
+  warning?: string;
 }
 
 export interface NoteMeta {

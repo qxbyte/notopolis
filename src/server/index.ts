@@ -23,6 +23,15 @@ if (existsSync(distDir)) {
     // wildcard: true 让 @fastify/static 内置处理 SPA 回退（未匹配路径返回 index.html）
     wildcard: true,
     index: 'index.html',
+    // HTML 永不缓存：资源文件名带内容 hash，唯有 index.html 被浏览器缓存会导致
+    // 「前端已重新构建但页面仍是旧版」的顽疾（hash 资源可长缓存）
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
   });
 }
 

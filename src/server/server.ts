@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, makeVault, saveConfig } from './config.js';
+import { registerRagRoutes, type RagRouteOpts } from './rag/routes.js';
 import { buildGraph } from './graph.js';
 import { buildCityModel, tierOf } from './layout/city.js';
 import { diffCity, snapshotOf } from './diff.js';
@@ -14,12 +15,13 @@ type WS = { readyState: number; send(s: string): void; on(ev: string, fn: () => 
 
 const THEMES = ['plains', 'mountain', 'harbor', 'snow'] as const;
 
-export async function createServer(): Promise<{
+export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
   app: FastifyInstance;
   broadcast: (msg: unknown) => void;
 }> {
   const app = Fastify();
   await app.register(websocket);
+  await registerRagRoutes(app, ragOpts);
   const sockets = new Set<WS>();
 
   app.get('/ws', { websocket: true }, (socket) => {
