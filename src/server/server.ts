@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, makeVault, saveConfig } from './config.js';
+import { registerExternalKbRoutes } from './rag/external.js';
 import { registerRagRoutes, type RagRouteOpts } from './rag/routes.js';
 import { buildGraph } from './graph.js';
 import { buildCityModel, tierOf } from './layout/city.js';
@@ -22,6 +23,7 @@ export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
   const app = Fastify();
   await app.register(websocket);
   await registerRagRoutes(app, ragOpts);
+  await registerExternalKbRoutes(app);
   const sockets = new Set<WS>();
 
   app.get('/ws', { websocket: true }, (socket) => {
