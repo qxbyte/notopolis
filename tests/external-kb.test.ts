@@ -68,8 +68,14 @@ describe('external-kb 对外接入 API', () => {
         indexedAt: 1, model: 'fake-embed', dims: 3,
       },
       [
-        { id: 'a.md#0', docPath: 'a.md', title: '检索', text: '向量检索原理' } as never,
-        { id: 'a.md#1', docPath: 'a.md', title: '布局', text: '城市布局算法' } as never,
+        {
+          id: 'a.md#0', docPath: 'a.md', title: '检索', text: '向量检索原理',
+          headings: ['架构', '检索层'], startLine: 12, endLine: 30,
+        } as never,
+        {
+          id: 'a.md#1', docPath: 'a.md', title: '布局', text: '城市布局算法',
+          headings: ['架构'], startLine: 31, endLine: 58,
+        } as never,
       ],
       [[1, 0, 0], [0, 1, 0]],
     );
@@ -93,7 +99,11 @@ describe('external-kb 对外接入 API', () => {
     const { hits, indexed, embedding } = ok.json();
     expect(indexed).toBe(true);
     expect(embedding).toMatchObject({ model: 'fake-embed', dims: 3 });
-    expect(hits[0]).toMatchObject({ title: '检索', path: 'a.md' });
+    // 定位字段：章节链 + 原文行号区间随命中返回
+    expect(hits[0]).toMatchObject({
+      title: '检索', path: 'a.md',
+      headings: ['架构', '检索层'], startLine: 12, endLine: 30,
+    });
     expect(hits[0].score).toBeGreaterThan(hits[1].score);
   });
 });

@@ -98,6 +98,10 @@ export async function registerExternalKbRoutes(app: FastifyInstance): Promise<vo
         score: h.score,
         title: h.chunk.title,
         path: h.chunk.docPath,
+        // 定位字段（可选约定）：章节链 + 原文行号区间，供调用方展示来源位置
+        headings: h.chunk.headings,
+        startLine: h.chunk.startLine,
+        endLine: h.chunk.endLine,
       }));
     return { hits, indexed: true, embedding: { model: meta.model, dims: meta.dims } };
   });
