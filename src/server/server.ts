@@ -23,7 +23,7 @@ export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
   const app = Fastify();
   await app.register(websocket);
   await registerRagRoutes(app, ragOpts);
-  await registerExternalKbRoutes(app);
+  await registerExternalKbRoutes(app, { fetchFn: ragOpts.fetchFn });
   const sockets = new Set<WS>();
 
   app.get('/ws', { websocket: true }, (socket) => {
