@@ -93,6 +93,27 @@ describe('retrieve 全链路（假嵌入）', () => {
     expect(docs).not.toContain('far.md'); // 向量 0 分 + 无关键词
   });
 
+  it('语义锚点：纯语义强命中不被关键词噪声挤出（回归「给我千问的apikey」）', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'noto-ret-anchor-'));
+    const store = new FileVectorStore(dir);
+    await store.load();
+    const mk = (p: string, v: number[], text: string) =>
+      store.upsertDoc(
+        { docPath: p, docHash: p, mtimeMs: 1, chunkCount: 1, indexedAt: 2, model: 'm', dims: 3 },
+        [mkChunk(p, 0, text)],
+        [v],
+      );
+    // 纯语义命中：与查询向量最贴近，但正文不含关键词 "apikey"（BM25 捞不到）
+    await mk('qwen.md', [1, 0, 0], '通义千问模型接入与配置说明。');
+    // 6 篇关键词噪声：都含 "apikey"（BM25 命中）+ 中等余弦（两路都在 → 纯 RRF 会占优）
+    for (let i = 0; i < 6; i++) await mk(`noise${i}.md`, [0.8, 0.6, 0], `第 ${i} 篇：apikey 配置项说明。`);
+    const kwIndex = new KeywordIndex(store.chunks());
+    const embedQuery = async () => [1, 0, 0]; // 指向 qwen.md（余弦 1.0）
+    const hits = await retrieve('apikey', { store, kwIndex, embedQuery }, { ...OPTS, topK: 3 }, 'hybrid');
+    // 修复前：qwen.md 被 6 篇双路噪声挤出 top3；修复后语义锚点保底置顶
+    expect(hits.map((h) => h.chunk.docPath)).toContain('qwen.md');
+  });
+
   it('vector 模式不走关键词路', async () => {
     const deps = await setup();
     const hits = await retrieve('zzza', deps, OPTS, 'vector');

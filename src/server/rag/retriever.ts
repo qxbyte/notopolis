@@ -21,6 +21,10 @@ export interface ScoredChunk {
 const RRF_K = 60;
 /** 召回宽度 = topK × 4（两路各自），融合后收敛 */
 const WIDTH_FACTOR = 4;
+/** 语义锚点：向量路 top-N 强命中保底进入结果，避免被 RRF/关键词噪声挤掉 */
+const SEMANTIC_ANCHORS = 3;
+/** 只保底「足够像」的语义命中（余弦下限），弱命中不强塞 */
+const SEMANTIC_ANCHOR_MIN = 0.5;
 
 /** RRF 融合：score = Σ 1/(k + rank)。对两路分数尺度不敏感，免调权。 */
 export function fuseRRF(lists: ScoredChunk[][], k = RRF_K): ScoredChunk[] {
@@ -94,14 +98,15 @@ export async function retrieve(
   const effMode: RetrieveMode = mode === 'hybrid' && !opts.hybrid ? 'vector' : mode;
 
   const lists: ScoredChunk[][] = [];
+  let vecOrdered: ScoredChunk[] = []; // 向量路（按余弦降序），供语义锚点用
 
   if (effMode !== 'keyword') {
     const qv = await deps.embedQuery(query);
-    const vecHits = deps.store
+    vecOrdered = deps.store
       .search(qv, width)
       .filter((h) => h.score >= opts.minScore)
       .map((h) => ({ chunk: h.chunk, score: h.score, vecScore: h.score }));
-    lists.push(vecHits);
+    lists.push(vecOrdered);
   }
   if (effMode !== 'vector') {
     const kwHits = deps.kwIndex.search(query, width).map((h) => ({
@@ -115,17 +120,33 @@ export async function retrieve(
 
   let fused = lists.length === 1 ? lists[0] : fuseRRF(lists);
 
-  // 轻量重排：查询词覆盖率微调（RRF 名次为主，覆盖率打破并列）
+  // 重排：融合名次 + 归一化余弦 + 关键词覆盖率的加权混合。
+  // 纯 RRF 名次会埋没「只在语义路强命中」的文档（它拿不到两路叠加分），
+  // 显式让余弦分参与排序，把高置信语义命中顶上来。
   const idByPos = new Map<string, number>();
   deps.store.chunks().forEach((c, i) => idByPos.set(c.id, i));
+  const n = Math.max(1, fused.length);
   fused = fused
     .map((sc, rank) => {
       const idx = idByPos.get(sc.chunk.id);
       const cov = idx === undefined ? 0 : deps.kwIndex.coverage(query, idx);
-      return { sc, key: -rank + cov * 1.5 }; // 覆盖率满分可抵 1.5 个名次
+      const rrfNorm = 1 - rank / n; // 融合名次归一化到 0..1
+      const vec = sc.vecScore ?? 0; // 余弦 0..1
+      return { sc, key: 0.45 * vec + 0.4 * rrfNorm + 0.15 * cov };
     })
     .sort((a, b) => b.key - a.key)
     .map((x) => x.sc);
+
+  // 语义锚点：hybrid 下把向量路 top-N 强命中保底置顶，避免被关键词噪声/RRF 挤出结果。
+  if (effMode === 'hybrid' && vecOrdered.length > 0) {
+    const anchors = vecOrdered
+      .filter((v) => (v.vecScore ?? 0) >= Math.max(opts.minScore, SEMANTIC_ANCHOR_MIN))
+      .slice(0, SEMANTIC_ANCHORS);
+    if (anchors.length > 0) {
+      const anchorIds = new Set(anchors.map((a) => a.chunk.id));
+      fused = [...anchors, ...fused.filter((sc) => !anchorIds.has(sc.chunk.id))];
+    }
+  }
 
   return packContext(capPerDoc(dedupeByHash(fused), opts.perDocLimit), opts.maxContextChars).slice(
     0,
