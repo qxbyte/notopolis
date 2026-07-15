@@ -1,0 +1,74 @@
+name: Deploy
+
+# 合并/推送到 main 即触发：CI 构建 → 门禁 → 打包运行时产物 → rsync 到服务器 → 重启服务。
+# 服务器只做「解压 + 重启」，不构建、不装依赖（1.6G 内存机，构建全放在 CI 侧）。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # 允许手动在 Actions 页面触发
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false # 部署不并发，避免半程覆盖
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # 与服务器 /usr/bin/node v20 对齐
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查（服务端 + 前端）
+        run: |
+          npm run typecheck
+          npx tsc --noEmit -p web/tsconfig.json
+
+      - name: 单元测试门禁
+        run: npm test
+
+      - name: 构建前端
+        run: npm run build
+
+      - name: 裁剪为运行时依赖（去掉 vite/vitest/tsc 等，保留 tsx + 运行依赖）
+        run: npm prune --omit=dev
+
+      - name: 组装部署产物
+        run: |
+          mkdir -p deploy/web
+          cp -r src deploy/
+          cp -r web/dist deploy/web/dist
+          cp -r node_modules deploy/
+          cp package.json package-lock.json deploy/
+
+      - name: 写入 SSH 私钥与 known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: rsync 产物到服务器
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts -p ${{ secrets.DEPLOY_PORT || '22' }}" \
+            deploy/ \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/notopolis/"
+
+      - name: 重启服务
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -p ${{ secrets.DEPLOY_PORT || '22' }} \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "sudo systemctl restart notopolis && sleep 2 && systemctl is-active notopolis"
+
+      - name: 清理密钥
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
