@@ -199,7 +199,10 @@ export function connectWS(onCityUpdated: (vaultId: string) => void): () => void 
   function connect() {
     if (closed) return;
 
-    socket = new WebSocket(`ws://${location.host}/ws`);
+    // 跟随页面协议：https 页面必须用 wss，否则浏览器按 Mixed Content 拦截并抛
+    // SecurityError（该异常若在模块顶层 connectWS 处未捕获会中断整个前端初始化）
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${wsProto}//${location.host}/ws`);
 
     socket.onopen = () => {
       // Successful connection — reset back-off

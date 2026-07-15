@@ -192,6 +192,20 @@ describe('connectWS', () => {
     FakeWebSocket.instances = [];
   });
 
+  it('uses wss:// when the page is served over https（避免 Mixed Content 拦截）', () => {
+    vi.stubGlobal('location', { protocol: 'https:', host: 'notopolis.bitpet.cn' });
+    const dispose = connectWS(vi.fn());
+    expect(FakeWebSocket.instances[0].url).toBe('wss://notopolis.bitpet.cn/ws');
+    dispose();
+  });
+
+  it('uses ws:// when the page is served over http', () => {
+    vi.stubGlobal('location', { protocol: 'http:', host: 'localhost:4777' });
+    const dispose = connectWS(vi.fn());
+    expect(FakeWebSocket.instances[0].url).toBe('ws://localhost:4777/ws');
+    dispose();
+  });
+
   it('calls onCityUpdated when receiving a city-updated message', () => {
     const onCityUpdated = vi.fn();
     const dispose = connectWS(onCityUpdated);
