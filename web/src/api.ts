@@ -1,6 +1,7 @@
 import type {
   CityDiff,
   CityModel,
+  GitSyncProgress,
   RagAnswer,
   RagChunkInfo,
   RagConfig,
@@ -34,9 +35,9 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 // REST API
 // ---------------------------------------------------------------------------
 
-export async function fetchWorld(): Promise<{ vaults: WorldVault[] }> {
+export async function fetchWorld(): Promise<{ vaults: WorldVault[]; hasGitToken?: boolean }> {
   const res = await apiFetch('/api/world');
-  return res.json() as Promise<{ vaults: WorldVault[] }>;
+  return res.json() as Promise<{ vaults: WorldVault[]; hasGitToken?: boolean }>;
 }
 
 export async function fetchCity(id: string): Promise<CityModel> {
@@ -76,6 +77,34 @@ export async function addVault(name: string, path: string, theme: string): Promi
 
 export async function removeVault(id: string): Promise<void> {
   await apiFetch(`/api/vaults/${id}`, { method: 'DELETE' });
+}
+
+/** Git 库：克隆远端仓库并注册（异步，返回后用 gitSyncProgress 轮询进度） */
+export async function addGitVault(body: {
+  url: string;
+  subdir: string;
+  name: string;
+  theme: string;
+  token?: string;
+}): Promise<{ started: boolean; id: string }> {
+  const res = await apiFetch('/api/vaults/git', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json() as Promise<{ started: boolean; id: string }>;
+}
+
+/** Git 库：拉取更新（异步） */
+export async function syncGitVault(id: string): Promise<{ started: boolean }> {
+  const res = await apiFetch(`/api/vaults/${id}/sync`, { method: 'POST' });
+  return res.json() as Promise<{ started: boolean }>;
+}
+
+/** Git 库同步进度轮询 */
+export async function gitSyncProgress(id: string): Promise<GitSyncProgress> {
+  const res = await apiFetch(`/api/vaults/${id}/sync/progress`);
+  return res.json() as Promise<GitSyncProgress>;
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,15 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { loadConfig, makeVault, saveConfig } from './config.js';
+import { configDir, loadConfig, makeVault, saveConfig } from './config.js';
+import {
+  gitCloneDir,
+  gitSyncProgress,
+  gitVaultId,
+  gitVaultPath,
+  removeCloneDir,
+  startGitSync,
+} from './gitvault.js';
 import { registerExternalKbRoutes } from './rag/external.js';
 import { registerRagRoutes, type RagRouteOpts } from './rag/routes.js';
 import { buildGraph } from './graph.js';
@@ -45,7 +53,7 @@ export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
         reason: ok ? undefined : scan.errors[0]?.reason,
       });
     }
-    return { vaults };
+    return { vaults, hasGitToken: !!cfg.git?.token };
   });
 
   app.get('/api/city/:vaultId', async (req, reply) => {
@@ -82,11 +90,92 @@ export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
     return vault;
   });
 
+  // Git 库：克隆远端仓库到服务器本地并注册（异步，进度经轮询端点获取）
+  app.post('/api/vaults/git', async (req, reply) => {
+    const body = req.body as {
+      url?: string;
+      subdir?: string;
+      name?: string;
+      theme?: string;
+      token?: string;
+    };
+    const url = body?.url?.trim();
+    const name = body?.name?.trim();
+    const subdir = body?.subdir?.trim() ?? '';
+    if (!url || !name) return reply.code(400).send({ error: '请填写仓库地址和城邦名称' });
+    if (!/^https?:\/\//i.test(url) && !/^git@/i.test(url)) {
+      return reply.code(400).send({ error: '仓库地址需为 https:// 或 git@ 形式' });
+    }
+    const id = gitVaultId(url, subdir);
+    const cloneDir = gitCloneDir(configDir(), id);
+    const vpath = gitVaultPath(cloneDir, subdir);
+    if (!vpath) return reply.code(400).send({ error: '子目录非法' });
+
+    const cfg = await loadConfig();
+    const theme = THEMES.includes(body.theme as never) ? (body.theme as VaultConfig['theme']) : 'plains';
+    // token 需在克隆前就绪：非空则存入全局配置（供后续同步复用），空则沿用旧值
+    if (body.token) {
+      cfg.git = { ...cfg.git, token: body.token };
+      await saveConfig(cfg);
+    }
+    const token = body.token || cfg.git?.token;
+
+    startGitSync({
+      id,
+      url,
+      cloneDir,
+      token,
+      onDone: async () => {
+        // 克隆成功：校验 subdir 确有笔记，再注册/更新 vault
+        const scan = await scanVault(vpath);
+        if (scan.notes.length === 0 && scan.errors.length > 0) {
+          throw new Error(`子目录无法读取：${scan.errors[0]?.reason ?? '未知'}`);
+        }
+        const latest = await loadConfig();
+        const vault: VaultConfig = { id, name, path: vpath, theme, git: { url, subdir: subdir || undefined } };
+        latest.vaults = latest.vaults.some((v) => v.id === id)
+          ? latest.vaults.map((v) => (v.id === id ? vault : v))
+          : [...latest.vaults, vault];
+        await saveConfig(latest);
+        broadcast({ type: 'city-updated', vaultId: id });
+      },
+    });
+    return { started: true, id };
+  });
+
+  // Git 库：对已注册的 Git 库执行拉取更新（异步）
+  app.post('/api/vaults/:vaultId/sync', async (req, reply) => {
+    const { vaultId } = req.params as { vaultId: string };
+    const cfg = await loadConfig();
+    const vault = cfg.vaults.find((v) => v.id === vaultId);
+    if (!vault?.git) return reply.code(400).send({ error: '该仓库不是 Git 库' });
+    const cloneDir = gitCloneDir(configDir(), vaultId);
+    startGitSync({
+      id: vaultId,
+      url: vault.git.url,
+      cloneDir,
+      token: cfg.git?.token,
+      onDone: async () => {
+        broadcast({ type: 'city-updated', vaultId });
+      },
+    });
+    return { started: true };
+  });
+
+  // Git 库同步进度（前端轮询画进度条）
+  app.get('/api/vaults/:vaultId/sync/progress', async (req) => {
+    const { vaultId } = req.params as { vaultId: string };
+    return gitSyncProgress(vaultId);
+  });
+
   app.delete('/api/vaults/:vaultId', async (req) => {
     const { vaultId } = req.params as { vaultId: string };
     const cfg = await loadConfig();
+    const vault = cfg.vaults.find((v) => v.id === vaultId);
     cfg.vaults = cfg.vaults.filter((v) => v.id !== vaultId);
     await saveConfig(cfg);
+    // Git 库连带清理克隆目录，避免磁盘泄漏
+    if (vault?.git) await removeCloneDir(gitCloneDir(configDir(), vaultId));
     return { ok: true };
   });
 

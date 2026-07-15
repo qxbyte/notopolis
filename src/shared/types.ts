@@ -3,11 +3,26 @@ export interface VaultConfig {
   name: string;
   path: string;
   theme: 'plains' | 'mountain' | 'harbor' | 'snow';
+  /** 存在则为 Git 库：从远端仓库克隆到服务器本地，path 指向克隆目录下的 subdir */
+  git?: { url: string; subdir?: string };
 }
 
 export interface AppConfig {
   vaults: VaultConfig[];
   rag?: RagConfig;
+  /** Git 库全局凭证（GitHub PAT 等），掩码往返、不回显明文 */
+  git?: { token?: string };
+}
+
+/** Git 库克隆/拉取进度（前端轮询画进度条） */
+export interface GitSyncProgress {
+  running: boolean;
+  /** 阶段中文：准备 / 克隆中 / 拉取中 / 扫描 / 完成 / 失败 */
+  phase: string;
+  /** 0–100 */
+  pct: number;
+  error?: string;
+  finishedAt?: number;
 }
 
 // ---------------------------------------------------------------------------

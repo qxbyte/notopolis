@@ -175,6 +175,38 @@
 .ob-error { min-height: 18px; font-size: 12px; color: var(--danger); margin-bottom: 8px;
             font-family: var(--font-ui); }
 
+/* ---- 加库方式：书签式选项卡 + 卡片 ---- */
+.vault-tabs { display: flex; gap: 6px; padding-left: 10px; position: relative; z-index: 1; }
+.vault-tab { background: transparent; border: 1px solid transparent; border-bottom: none;
+  color: var(--muted); padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+  border-radius: 12px 12px 0 0; font-family: var(--font-ui); position: relative; top: 1px;
+  transition: background .15s, color .15s, border-color .15s; }
+.vault-tab:hover { color: var(--text); }
+.vault-tab.active { background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface);
+  color: var(--text); }
+.vault-tab-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 0 12px 12px 12px; padding: 16px; }
+.add-form[hidden] { display: none; }
+
+/* ---- Git 库标记 + 同步按钮 ---- */
+.vault-git { margin-left: 6px; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--accent-text); background: var(--primary-soft); border-radius: var(--pill);
+  padding: 1px 7px; vertical-align: middle; }
+.sync-btn { flex: 0 0 auto; background: var(--bg); border: 1px solid var(--border);
+  color: var(--muted); border-radius: var(--pill); padding: 4px 12px; font-size: 11px;
+  cursor: pointer; font-family: var(--font-ui); transition: border-color .15s, color .15s; }
+.sync-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--text); }
+.sync-btn:disabled { opacity: .5; cursor: default; }
+
+/* ---- 克隆/同步进度条 ---- */
+.git-progress { margin-bottom: 10px; }
+.git-progress-bar { height: 8px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--pill); overflow: hidden; }
+.git-progress-fill { height: 100%; width: 0; background: var(--primary);
+  border-radius: var(--pill); transition: width .3s ease; }
+.git-progress-label { margin-top: 6px; font-size: 11.5px; color: var(--muted);
+  font-family: var(--font-ui); }
+
 /* ---- 返回按钮 + 世界地图右上设置按钮 ---- */
 #back-btn, #settings-btn { position: fixed; top: 14px; z-index: 10;
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
