@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Notopolis favicon：深色圆角瓷砖 + 柠檬绿手绘城市（尖顶主塔=帝都首府） -->
+  <rect width="100" height="100" rx="24" fill="#16181A"/>
+  <g fill="#DCF231">
+    <!-- 左矮楼（顶略斜，手绘感） -->
+    <path d="M20 79 L20 55 L38 51 L38 79 Z"/>
+    <!-- 右中楼 -->
+    <path d="M62 79 L62 47 L80 50 L80 79 Z"/>
+    <!-- 中主塔 + 三角尖顶 -->
+    <path d="M41 79 L41 35 L50 24 L59 35 L59 79 Z"/>
+    <!-- 地面线 -->
+    <rect x="15" y="79" width="70" height="5" rx="2.5"/>
+  </g>
+  <!-- 窗户：负形（暗色），点出"笔记=建筑" -->
+  <g fill="#16181A">
+    <rect x="45.5" y="41" width="3.2" height="4.2" rx="0.6"/><rect x="51.3" y="41" width="3.2" height="4.2" rx="0.6"/>
+    <rect x="45.5" y="51" width="3.2" height="4.2" rx="0.6"/><rect x="51.3" y="51" width="3.2" height="4.2" rx="0.6"/>
+    <rect x="45.5" y="61" width="3.2" height="4.2" rx="0.6"/><rect x="51.3" y="61" width="3.2" height="4.2" rx="0.6"/>
+    <rect x="25" y="61" width="3" height="4" rx="0.6"/><rect x="30.5" y="61" width="3" height="4" rx="0.6"/>
+    <rect x="67.5" y="58" width="3" height="4" rx="0.6"/><rect x="72.8" y="58" width="3" height="4" rx="0.6"/>
+    <rect x="67.5" y="68" width="3" height="4" rx="0.6"/><rect x="72.8" y="68" width="3" height="4" rx="0.6"/>
+  </g>
+</svg>
