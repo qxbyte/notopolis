@@ -70,6 +70,22 @@ function redact(text: string, token?: string): string {
   return token ? text.split(token).join('•••') : text;
 }
 
+/** 清理 git 错误信息：抹 token + 剔除 --progress 进度噪声，只留真正的 fatal/error 行 */
+function cleanErr(text: string, token?: string): string {
+  return redact(text, token)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(
+      (l) =>
+        l &&
+        !/^(remote:\s*)?(Enumerating|Counting|Compressing|Receiving|Resolving|Unpacking|Total)\b/.test(l) &&
+        l !== 'remote:',
+    )
+    .join('\n')
+    .trim()
+    .slice(-400);
+}
+
 /** 解析 git --progress 的百分比与阶段（取 stderr 块里最后一个「标签: N%」） */
 export function parseGitProgress(chunk: string): { pct: number; phase: string } | null {
   const re = /(Receiving objects|Resolving deltas|Counting objects|Compressing objects):\s+(\d+)%/g;
@@ -128,24 +144,30 @@ export async function syncGitRepo(opts: {
       onStderr,
     });
     if (r.code !== 0) {
-      return { ok: false, action: 'clone', message: redact(r.stderr || r.stdout, token).trim() };
+      return { ok: false, action: 'clone', message: cleanErr(r.stderr || r.stdout, token) };
     }
     await exec('git', ['remote', 'set-url', 'origin', url], { cwd: cloneDir });
     return { ok: true, action: 'clone', message: 'cloned' };
   }
 
+  // 只读镜像库的「同步」：fetch 远端 HEAD 后 hard reset，而不是 pull(merge)——
+  // 浅克隆再 pull 会因两段浅历史无共同祖先报 "refusing to merge unrelated histories"。
   onProgress?.(10, '拉取中');
   const setAuth = await exec('git', ['remote', 'set-url', 'origin', authUrl], { cwd: cloneDir });
   if (setAuth.code !== 0) {
-    return { ok: false, action: 'pull', message: redact(setAuth.stderr, token).trim() };
+    return { ok: false, action: 'pull', message: cleanErr(setAuth.stderr, token) };
   }
-  const pull = await exec('git', ['pull', '--depth', '1', '--no-rebase', '--progress', 'origin'], {
+  const fetched = await exec('git', ['fetch', '--depth', '1', '--progress', 'origin', 'HEAD'], {
     cwd: cloneDir,
     onStderr,
   });
   await exec('git', ['remote', 'set-url', 'origin', url], { cwd: cloneDir });
-  if (pull.code !== 0) {
-    return { ok: false, action: 'pull', message: redact(pull.stderr || pull.stdout, token).trim() };
+  if (fetched.code !== 0) {
+    return { ok: false, action: 'pull', message: cleanErr(fetched.stderr || fetched.stdout, token) };
+  }
+  const reset = await exec('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: cloneDir });
+  if (reset.code !== 0) {
+    return { ok: false, action: 'pull', message: cleanErr(reset.stderr || reset.stdout, token) };
   }
   return { ok: true, action: 'pull', message: 'pulled' };
 }
