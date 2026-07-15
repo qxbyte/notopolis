@@ -68,7 +68,7 @@ export function createDocPanel(
     const head =
       `<div class="panel-group-head">共 ${docs.length} 篇 · 已入库 ${indexedN}` +
       (ragEnabled
-        ? ` <span class="act act-index-all">${pendingN > 0 ? `全部入库 ${pendingN}` : '全部入库'}</span>`
+        ? ` <span class="act act-index-all${pendingN > 0 ? '' : ' act-update'}">${pendingN > 0 ? `全部入库 ${pendingN}` : '全部更新'}</span>`
         : '') +
       `<span class="tree-tools">` +
       `<button class="tree-tool tree-toggle-all" title="${treeCollapsed ? '全部展开' : '全部收起'}">${treeCollapsed ? ICON.expandAll : ICON.collapseAll}</button>` +
@@ -96,8 +96,11 @@ export function createDocPanel(
         // 发送目录下全部文档（含子目录），内容未变的服务端按 hash 自动跳过
         const all = collect(node);
         const pending = all.filter((p) => byPath.get(p)?.state !== 'indexed').length;
-        const label = pending > 0 ? `入库 ${pending}` : '入库';
-        return `<span class="act act-index tree-act" data-paths="${esc(all.join('|'))}">${label}</span>`;
+        // 全部已入库 → 「更新」（点它仍走入库流程，服务端按 hash 跳过未变的）；否则「入库 N」
+        const done = pending === 0;
+        const label = done ? '更新' : `入库 ${pending}`;
+        const cls = done ? 'act act-index act-update tree-act' : 'act act-index tree-act';
+        return `<span class="${cls}" data-paths="${esc(all.join('|'))}">${label}</span>`;
       },
     );
     body.innerHTML = progressHTML + hint + head + treeHTML;

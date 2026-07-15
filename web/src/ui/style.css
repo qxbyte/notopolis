@@ -452,6 +452,9 @@
   transition: background .15s; }
 .act.act-index:hover, .act.act-index-all:hover { background: var(--primary-dark);
   text-decoration: none; }
+/* 全部已入库时的「更新」态：柔和底 + 深色字，与实心「入库」区分（同已入库印章的色系） */
+.act.act-update { background: var(--primary-soft); color: var(--accent-text); }
+.act.act-update:hover { background: var(--primary-soft); filter: brightness(0.94); }
 .tree-act { margin-left: 8px; flex: none; }
 .act-index-all { margin-left: 10px; }
 .panel-body.indexing .act-index, .panel-body.indexing .act-index-all { opacity: 0.4; cursor: not-allowed; }

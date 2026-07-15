@@ -75,6 +75,26 @@ describe('createDocPanel', () => {
     panel.dispose();
   });
 
+  it('目录全部已入库 → 按钮显示「更新」并带 act-update；有待入库 → 「入库 N」', async () => {
+    const docs: RagDocStatus[] = [
+      { path: '01-Done/a.md', title: 'a', state: 'indexed', chunkCount: 2, indexedAt: 1, model: 'm' },
+      { path: '01-Done/b.md', title: 'b', state: 'indexed', chunkCount: 2, indexedAt: 1, model: 'm' },
+      { path: '02-Todo/c.md', title: 'c', state: 'none', chunkCount: 0, indexedAt: null, model: null },
+    ];
+    stubFetch(true, docs);
+    const panel = createDocPanel(container, { vaultId: 'v1', onLocate: () => undefined });
+    panel.open();
+    await flush();
+    const acts = [...container.querySelectorAll<HTMLElement>('.tree-folder-head .act-index')];
+    const done = acts.find((a) => a.dataset.paths?.includes('01-Done/a.md'))!;
+    expect(done.textContent).toBe('更新');
+    expect(done.classList.contains('act-update')).toBe(true);
+    const todo = acts.find((a) => a.dataset.paths?.includes('02-Todo/c.md'))!;
+    expect(todo.textContent).toBe('入库 1');
+    expect(todo.classList.contains('act-update')).toBe(false);
+    panel.dispose();
+  });
+
   it('RAG 未启用降级：提示条出现、入库按钮隐藏、点击文档行仍可定位', async () => {
     stubFetch(false);
     const onLocate = vi.fn();
