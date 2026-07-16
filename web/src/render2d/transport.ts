@@ -406,8 +406,6 @@ function buildFerry(
 ): FerryRoute | null {
   const { waterStyle } = params;
 
-  if (waterStyle === 'frozen') return null;
-
   if (waterStyle === 'sea') {
     // harbor: 从离海最近的区取最近海顶点作渡口，终点为 islands[0]
     const sea = params.seaData;

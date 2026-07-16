@@ -8,9 +8,18 @@ export function configDir(): string {
   return process.env.NOTOPOLIS_CONFIG_DIR ?? path.join(homedir(), '.notopolis');
 }
 
+const VALID_THEMES: ReadonlyArray<VaultConfig['theme']> = ['plains', 'mountain', 'harbor'];
+
 export async function loadConfig(): Promise<AppConfig> {
   try {
-    return JSON.parse(await readFile(path.join(configDir(), 'config.json'), 'utf8'));
+    const cfg: AppConfig = JSON.parse(
+      await readFile(path.join(configDir(), 'config.json'), 'utf8'),
+    );
+    // 已删除/未知主题（如旧版 snow）归一为 plains，旧 config.json 无缝升级
+    for (const v of cfg.vaults ?? []) {
+      if (!VALID_THEMES.includes(v.theme)) v.theme = 'plains';
+    }
+    return cfg;
   } catch {
     return { vaults: [] };
   }

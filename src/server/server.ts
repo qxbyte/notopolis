@@ -22,7 +22,7 @@ import type { VaultConfig } from '../shared/types.js';
 
 type WS = { readyState: number; send(s: string): void; on(ev: string, fn: () => void): void };
 
-const THEMES = ['plains', 'mountain', 'harbor', 'snow'] as const;
+const THEMES = ['plains', 'mountain', 'harbor'] as const;
 
 export async function createServer(ragOpts: RagRouteOpts = {}): Promise<{
   app: FastifyInstance;

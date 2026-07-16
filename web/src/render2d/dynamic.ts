@@ -926,9 +926,7 @@ export function createDynamicLayer(
     // ---- 帆船 / 快艇 — 按 waterStyle 分派 ----
     const waterStyle = params.waterStyle ?? 'river';
 
-    if (waterStyle === 'frozen') {
-      // 冻河：不出船
-    } else if (waterStyle === 'sea' && params.seaData) {
+    if (waterStyle === 'sea' && params.seaData) {
       // 海：沿海岸线采样点巡航
       const coastPts = params.seaData.coastPts;
       const totalPts = coastPts.length - 1;

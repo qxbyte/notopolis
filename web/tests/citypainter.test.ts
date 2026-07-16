@@ -172,13 +172,13 @@ describe('T5 — 聚落内树木减量', () => {
 });
 
 describe('T6 — Zoo 出现时确定性', () => {
-  it('snow 主题两次 paintCity ctx 调用序列完全相同（含 zoo reindeer/owl 路径）', () => {
-    const snowFixture: CityModel = { ...fixture, theme: 'snow' };
-    const bigParams = worldParams('test-snow', 80, 80, 100, 100);
+  it('mountain 主题两次 paintCity ctx 调用序列完全相同（含 zoo 动物路径）', () => {
+    const mountainFixture: CityModel = { ...fixture, theme: 'mountain' };
+    const bigParams = worldParams('test-mountain', 80, 80, 100, 100);
     const { world: w1, calls: c1 } = makeMockWorld();
     const { world: w2, calls: c2 } = makeMockWorld();
-    paintCity(w1 as never, snowFixture, bigParams, 'test-snow');
-    paintCity(w2 as never, snowFixture, bigParams, 'test-snow');
+    paintCity(w1 as never, mountainFixture, bigParams, 'test-mountain');
+    paintCity(w2 as never, mountainFixture, bigParams, 'test-mountain');
     expect(c1).toEqual(c2);
     expect(c1.length).toBeGreaterThan(100); // 确保有实质绘制
   });

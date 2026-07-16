@@ -2,7 +2,7 @@ export interface VaultConfig {
   id: string;
   name: string;
   path: string;
-  theme: 'plains' | 'mountain' | 'harbor' | 'snow';
+  theme: 'plains' | 'mountain' | 'harbor';
   /** 存在则为 Git 库：从远端仓库克隆到服务器本地，path 指向克隆目录下的 subdir */
   git?: { url: string; subdir?: string };
 }

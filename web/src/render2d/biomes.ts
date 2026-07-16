@@ -7,8 +7,8 @@
 
 import { PAPER } from './sketch';
 
-export type WaterStyle = 'river' | 'sea' | 'frozen' | 'torrent';
-export type VegetationKind = 'mixed' | 'sparse-pine' | 'dense-pine' | 'palm-ish';
+export type WaterStyle = 'river' | 'sea' | 'torrent';
+export type VegetationKind = 'mixed' | 'dense-pine' | 'palm-ish';
 
 export interface BiomeSpec {
   key: string;
@@ -69,16 +69,6 @@ export const BIOMES: Record<string, BiomeSpec> = {
     vegetation: { kind: 'palm-ish', density: 0.5 },
     pastelShift: (hex: string, _rng: () => number) => lerpHex(hex, '#b8d4e8', 0.08),
     extras: ['lighthouse', 'pier', 'seagull', 'coast'],
-  },
-
-  snow: {
-    key: 'snow',
-    ground: { paper: '#eef2f6', patch: '#d8e4ee' },   // 冷白底 + 冰蓝斑块
-    waterStyle: 'frozen',
-    mountains: { proximity: -30, density: 2, snowline: 0.55 },
-    vegetation: { kind: 'sparse-pine', density: 0.7 },
-    pastelShift: (hex: string, _rng: () => number) => lerpHex(hex, '#ffffff', 0.30),
-    extras: ['sled-track', 'ice-lake'],
   },
 
   mountain: {

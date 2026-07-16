@@ -37,7 +37,7 @@ describe('REST API', () => {
     await app.inject({
       method: 'POST',
       url: '/api/vaults',
-      payload: { name: '迷雾城', path: '/nonexistent/xyz', theme: 'snow' },
+      payload: { name: '迷雾城', path: '/nonexistent/xyz', theme: 'mountain' },
     });
     const world = (await app.inject('/api/world')).json();
     expect(world.vaults[0].ok).toBe(false);

@@ -573,82 +573,6 @@ function paintSea(
 }
 
 /* ------------------------------------------------------------------ */
-/* 层 3frozen — 冻河（snow 专属）                                       */
-/* ------------------------------------------------------------------ */
-
-function paintFrozenRiver(
-  ctx: CanvasRenderingContext2D,
-  params: WorldParams,
-  rng: () => number,
-): void {
-  const { RIVER_W, riverWorld, T } = params;
-  const step = 1;
-  const vMin = -T * 1.5; // 覆盖 ±T 地图对角（1.41T）
-  const vMax = T * 1.5;
-
-  const pts: [number, number][] = [];
-  for (let v = vMin; v <= vMax; v += step) pts.push(riverWorld(v));
-  if (pts.length < 2) return;
-
-  const bankOffset = RIVER_W / 2 + 0.8;
-  const leftBank = offsetPolyline(pts, bankOffset);
-  const rightBank = offsetPolyline(pts, -bankOffset);
-
-  // 冰面填充（冰白）
-  (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.85;
-  ctx.beginPath();
-  ctx.moveTo(leftBank[0][0], leftBank[0][1]);
-  for (const p of leftBank) ctx.lineTo(p[0], p[1]);
-  for (let i = rightBank.length - 1; i >= 0; i--) ctx.lineTo(rightBank[i][0], rightBank[i][1]);
-  ctx.closePath();
-  ctx.fill();
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-
-  // 冰边（冰蓝）
-  const iceEdge = '#8ab4d0';
-  (ctx as unknown as Record<string, unknown>).strokeStyle = iceEdge;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
-  wobblyPath(ctx, rng, leftBank, 0.8);
-  ctx.stroke();
-  wobblyPath(ctx, rng, rightBank, 0.8);
-  ctx.stroke();
-
-  // 河面裂纹折线（2-3 条）
-  const crackCount = 2 + Math.floor(rng() * 2);
-  (ctx as unknown as Record<string, unknown>).strokeStyle = iceEdge;
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
-  for (let c2 = 0; c2 < crackCount; c2++) {
-    const startIdx = Math.floor(rng() * (pts.length * 0.8));
-    const crackLen = 5 + Math.floor(rng() * 8);
-    const crackPts: [number, number][] = [];
-    for (let ck = 0; ck < crackLen; ck++) {
-      const ci = Math.min(pts.length - 1, startIdx + ck);
-      const cx2 = pts[ci][0] + (rng() - 0.5) * RIVER_W * 0.8;
-      const cz2 = pts[ci][1] + (rng() - 0.5) * RIVER_W * 0.3;
-      crackPts.push([cx2, cz2]);
-    }
-    wobblyPath(ctx, rng, crackPts, 0.3);
-    ctx.stroke();
-  }
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-
-  // 局部未冻水洞（1-2 个深色圆）
-  const holeCount = 1 + Math.floor(rng() * 2);
-  for (let h = 0; h < holeCount; h++) {
-    const hi = Math.floor(rng() * pts.length);
-    const hx = pts[hi][0] + (rng() - 0.5) * RIVER_W * 0.5;
-    const hz = pts[hi][1] + (rng() - 0.5) * RIVER_W * 0.3;
-    (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.water;
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
-    wobblyCircle(ctx, rng, hx, hz, 1.5 + rng(), 0.15);
-    ctx.fill();
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-  }
-}
-
-/* ------------------------------------------------------------------ */
 /* 层 3torrent — 激流（mountain 专属）                                  */
 /* ------------------------------------------------------------------ */
 
@@ -1172,7 +1096,7 @@ function paintBuildings(
 }
 
 /* ------------------------------------------------------------------ */
-/* 针叶树（sparse-pine / dense-pine）                                   */
+/* 针叶树（dense-pine）                                                 */
 /* ------------------------------------------------------------------ */
 
 function paintPineTree(
@@ -1181,7 +1105,6 @@ function paintPineTree(
   tx: number,
   tz: number,
   h: number,
-  withSnow: boolean,
 ): void {
   // 树干
   const trunkH = h * 0.4;
@@ -1210,30 +1133,6 @@ function paintPineTree(
     ctx.stroke();
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   }
-
-  // 雪：顶部留白 + 树下雪堆弧
-  if (withSnow) {
-    (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
-    // 顶部雪帽
-    const snowTipY = tz - h * 0.7;
-    const snowW = h * 0.12;
-    ctx.beginPath();
-    ctx.moveTo(tx, snowTipY);
-    ctx.lineTo(tx - snowW, snowTipY + h * 0.15);
-    ctx.lineTo(tx + snowW, snowTipY + h * 0.15);
-    ctx.closePath();
-    ctx.fill();
-    // 树下雪堆弧
-    const snowBaseW = h * 0.25;
-    (ctx as unknown as Record<string, unknown>).strokeStyle = '#c8d8e8';
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.18;
-    ctx.beginPath();
-    ctx.moveTo(tx - snowBaseW, tz + trunkH * 0.3);
-    ctx.quadraticCurveTo(tx, tz + trunkH * 0.3 - h * 0.1, tx + snowBaseW, tz + trunkH * 0.3);
-    ctx.stroke();
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1248,7 +1147,6 @@ function paintTrees(
 ): void {
   const biomeT = getBiome(theme);
   const vegKind = biomeT.vegetation.kind;
-  const withSnow = theme === 'snow';
 
   for (const district of districts) {
     const rng = rng0(wsPrefix + ':deco:' + district.dir);
@@ -1308,8 +1206,8 @@ function paintTrees(
         ctx.lineTo(tx, tz + trunkH2);
         ctx.stroke();
       } else {
-        // sparse-pine / dense-pine：三角松
-        paintPineTree(ctx, rng, tx, tz, tr * 2.2, withSnow);
+        // dense-pine：三角松
+        paintPineTree(ctx, rng, tx, tz, tr * 2.2);
       }
 
       placed++;
@@ -1418,32 +1316,6 @@ function paintExtras(
       ctx.stroke();
       (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
     }
-  }
-
-  // ---- snow: 雪橇辙迹 ----
-  if (extras.includes('sled-track')) {
-    const trackStart = { x: params.cityHalfW * (0.5 + rng() * 0.4), z: params.cityHalfD * (0.5 + rng() * 0.4) };
-    const trackLen = 60 + rng() * 40;
-    const trackAngle = rng() * Math.PI * 2;
-    const trackPts1: [number, number][] = [];
-    const trackPts2: [number, number][] = [];
-    const trackOffset = 0.6;
-    const steps = 20;
-    for (let si = 0; si <= steps; si++) {
-      const u = si / steps;
-      const d = u * trackLen;
-      const waver = Math.sin(u * Math.PI * 3) * 4;
-      const tx2 = trackStart.x + Math.cos(trackAngle) * d + Math.cos(trackAngle + Math.PI / 2) * waver;
-      const tz2 = trackStart.z + Math.sin(trackAngle) * d + Math.sin(trackAngle + Math.PI / 2) * waver;
-      trackPts1.push([tx2 - Math.sin(trackAngle) * trackOffset, tz2 + Math.cos(trackAngle) * trackOffset]);
-      trackPts2.push([tx2 + Math.sin(trackAngle) * trackOffset, tz2 - Math.cos(trackAngle) * trackOffset]);
-    }
-    (ctx as unknown as Record<string, unknown>).strokeStyle = '#8ab4d0';
-    (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
-    dashedPath(ctx, trackPts1, [3, 4]);
-    dashedPath(ctx, trackPts2, [3, 4]);
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   }
 
   // ---- mountain: 梯田（山脚 3-4 条等高弧线组）----
@@ -1979,9 +1851,7 @@ function paintZoo(
   rng: () => number,
   cx: number,
   cz: number,
-  theme: string,
 ): void {
-  const isSnow = theme === 'snow';
   const fenceR = 12 + rng() * 4; // 12-16（略大）
 
   // 外圈围栏（加粗）
@@ -2086,83 +1956,46 @@ function paintZoo(
       (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
       (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
 
-      if (isSnow) {
-        if (ai % 2 === 0) {
-          // 驯鹿（体型 ×2）
-          wobblyCircle(ctx, rng, ax2, az2, 1.6, 0.15);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 1.6);
-          ctx.lineTo(ax2 - 1.2, az2 - 3.2);
-          ctx.moveTo(ax2 - 0.6, az2 - 2.4);
-          ctx.lineTo(ax2 - 1.6, az2 - 2.0);
-          ctx.moveTo(ax2, az2 - 1.6);
-          ctx.lineTo(ax2 + 1.2, az2 - 3.2);
-          ctx.moveTo(ax2 + 0.6, az2 - 2.4);
-          ctx.lineTo(ax2 + 1.6, az2 - 2.0);
-          ctx.stroke();
-        } else {
-          // 雪枭（体型 ×2）
-          wobblyCircle(ctx, rng, ax2, az2, 1.3, 0.12);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(ax2 - 0.6, az2 - 1.3);
-          ctx.lineTo(ax2 - 1.1, az2 - 2.2);
-          ctx.lineTo(ax2 - 0.1, az2 - 1.9);
-          ctx.closePath();
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(ax2 + 0.6, az2 - 1.3);
-          ctx.lineTo(ax2 + 1.1, az2 - 2.2);
-          ctx.lineTo(ax2 + 0.1, az2 - 1.9);
-          ctx.closePath();
-          ctx.stroke();
-          (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.ink;
-          ctx.fillRect(ax2 - 0.4, az2 - 0.5, 0.3, 0.3);
-          ctx.fillRect(ax2 + 0.1, az2 - 0.5, 0.3, 0.3);
-        }
+      // 轮换：长颈鹿/象/鹿 by index（体型 ×2）
+      const kind = ai % 3;
+      if (kind === 0) {
+        // 长颈鹿（脖颈 ×2，头 ×2）
+        ctx.beginPath();
+        ctx.moveTo(ax2, az2);
+        ctx.lineTo(ax2 + 0.6, az2 - 3.6);
+        ctx.stroke();
+        wobblyCircle(ctx, rng, ax2 + 0.6, az2 - 4.0, 0.7, 0.12);
+        ctx.stroke();
+        // 斑点
+        ctx.fillRect(ax2 - 0.4, az2 - 1.0, 0.5, 0.5);
+        ctx.fillRect(ax2 + 0.2, az2 - 1.6, 0.4, 0.4);
+      } else if (kind === 1) {
+        // 象（身 ×2，耳 ×2）
+        wobblyCircle(ctx, rng, ax2, az2, 1.5, 0.12);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(ax2 - 1.5, az2, 1.0, -Math.PI / 2, Math.PI / 2);
+        ctx.stroke();
       } else {
-        // 轮换：长颈鹿/象/鹿 by index（体型 ×2）
-        const kind = ai % 3;
-        if (kind === 0) {
-          // 长颈鹿（脖颈 ×2，头 ×2）
-          ctx.beginPath();
-          ctx.moveTo(ax2, az2);
-          ctx.lineTo(ax2 + 0.6, az2 - 3.6);
-          ctx.stroke();
-          wobblyCircle(ctx, rng, ax2 + 0.6, az2 - 4.0, 0.7, 0.12);
-          ctx.stroke();
-          // 斑点
-          ctx.fillRect(ax2 - 0.4, az2 - 1.0, 0.5, 0.5);
-          ctx.fillRect(ax2 + 0.2, az2 - 1.6, 0.4, 0.4);
-        } else if (kind === 1) {
-          // 象（身 ×2，耳 ×2）
-          wobblyCircle(ctx, rng, ax2, az2, 1.5, 0.12);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(ax2 - 1.5, az2, 1.0, -Math.PI / 2, Math.PI / 2);
-          ctx.stroke();
-        } else {
-          // 鹿（颈 ×2，角 ×2）
-          ctx.beginPath();
-          ctx.moveTo(ax2, az2);
-          ctx.lineTo(ax2, az2 - 2.4);
-          ctx.stroke();
-          // 左分叉
-          ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 2.0);
-          ctx.lineTo(ax2 - 1.0, az2 - 3.0);
-          ctx.moveTo(ax2 - 0.6, az2 - 2.4);
-          ctx.lineTo(ax2 - 1.4, az2 - 2.2);
-          ctx.stroke();
-          // 右分叉
-          ctx.beginPath();
-          ctx.moveTo(ax2, az2 - 2.0);
-          ctx.lineTo(ax2 + 1.0, az2 - 3.0);
-          ctx.moveTo(ax2 + 0.6, az2 - 2.4);
-          ctx.lineTo(ax2 + 1.4, az2 - 2.2);
-          ctx.stroke();
-        }
+        // 鹿（颈 ×2，角 ×2）
+        ctx.beginPath();
+        ctx.moveTo(ax2, az2);
+        ctx.lineTo(ax2, az2 - 2.4);
+        ctx.stroke();
+        // 左分叉
+        ctx.beginPath();
+        ctx.moveTo(ax2, az2 - 2.0);
+        ctx.lineTo(ax2 - 1.0, az2 - 3.0);
+        ctx.moveTo(ax2 - 0.6, az2 - 2.4);
+        ctx.lineTo(ax2 - 1.4, az2 - 2.2);
+        ctx.stroke();
+        // 右分叉
+        ctx.beginPath();
+        ctx.moveTo(ax2, az2 - 2.0);
+        ctx.lineTo(ax2 + 1.0, az2 - 3.0);
+        ctx.moveTo(ax2 + 0.6, az2 - 2.4);
+        ctx.lineTo(ax2 + 1.4, az2 - 2.2);
+        ctx.stroke();
       }
     }
   }
@@ -2177,11 +2010,9 @@ function paintWetland(
   rng: () => number,
   cx: number,
   cz: number,
-  theme: string,
   isHarbor: boolean,
 ): void {
-  const isSnow = theme === 'snow';
-  const poolColor = isHarbor ? '#b8d4c0' : isSnow ? '#ccdce8' : PAPER.water;
+  const poolColor = isHarbor ? '#b8d4c0' : PAPER.water;
   const poolCount = 3 + Math.floor(rng() * 4); // 3-6
 
   // 水洼群
@@ -2190,7 +2021,7 @@ function paintWetland(
     const pz = cz + (rng() - 0.5) * 14;
     const pr = 2 + rng() * 3;
     (ctx as unknown as Record<string, unknown>).fillStyle = poolColor;
-    (ctx as unknown as Record<string, unknown>).globalAlpha = isSnow ? 0.6 : 0.5;
+    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
     wobblyCircle(ctx, rng, px, pz, pr, 0.18);
     ctx.fill();
     (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.waterEdge;
@@ -2201,47 +2032,29 @@ function paintWetland(
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   }
 
-  if (isSnow) {
-    // 冻结湿地：冰面裂纹代替芦苇
-    (ctx as unknown as Record<string, unknown>).strokeStyle = '#8ab4d0';
+  // 芦苇丛（3-5 簇，每簇 4-6 短竖线 + 顶端小点）
+  const reedClusterCount = 3 + Math.floor(rng() * 3);
+  for (let rc = 0; rc < reedClusterCount; rc++) {
+    const rx = cx + (rng() - 0.5) * 20;
+    const rz = cz + (rng() - 0.5) * 16;
+    const reedCount = 4 + Math.floor(rng() * 3);
+    (ctx as unknown as Record<string, unknown>).strokeStyle = '#8a9860';
     (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
-    for (let ci = 0; ci < 4; ci++) {
-      const cpx = cx + (rng() - 0.5) * 16;
-      const cpz = cz + (rng() - 0.5) * 12;
-      const crackPts: [number, number][] = [];
-      for (let ck = 0; ck < 5; ck++) {
-        crackPts.push([cpx + (rng() - 0.5) * 4, cpz + (rng() - 0.5) * 4]);
-      }
-      wobblyPath(ctx, rng, crackPts, 0.2);
+    for (let ri = 0; ri < reedCount; ri++) {
+      const rrx = rx + (rng() - 0.5) * 2.5;
+      const rrz = rz + (rng() - 0.5) * 2.0;
+      const rh = 1.5 + rng() * 1.0;
+      ctx.beginPath();
+      ctx.moveTo(rrx, rrz);
+      ctx.lineTo(rrx + (rng() - 0.5) * 0.3, rrz - rh);
       ctx.stroke();
-    }
-    (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-  } else {
-    // 芦苇丛（3-5 簇，每簇 4-6 短竖线 + 顶端小点）
-    const reedClusterCount = 3 + Math.floor(rng() * 3);
-    for (let rc = 0; rc < reedClusterCount; rc++) {
-      const rx = cx + (rng() - 0.5) * 20;
-      const rz = cz + (rng() - 0.5) * 16;
-      const reedCount = 4 + Math.floor(rng() * 3);
-      (ctx as unknown as Record<string, unknown>).strokeStyle = '#8a9860';
-      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
-      for (let ri = 0; ri < reedCount; ri++) {
-        const rrx = rx + (rng() - 0.5) * 2.5;
-        const rrz = rz + (rng() - 0.5) * 2.0;
-        const rh = 1.5 + rng() * 1.0;
-        ctx.beginPath();
-        ctx.moveTo(rrx, rrz);
-        ctx.lineTo(rrx + (rng() - 0.5) * 0.3, rrz - rh);
-        ctx.stroke();
-        // 顶端小圆点
-        (ctx as unknown as Record<string, unknown>).fillStyle = '#6a7850';
-        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
-        ctx.beginPath();
-        ctx.arc(rrx + (rng() - 0.5) * 0.3, rrz - rh - 0.15, 0.15, 0, Math.PI * 2);
-        ctx.fill();
-        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-      }
+      // 顶端小圆点
+      (ctx as unknown as Record<string, unknown>).fillStyle = '#6a7850';
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.8;
+      ctx.beginPath();
+      ctx.arc(rrx + (rng() - 0.5) * 0.3, rrz - rh - 0.15, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
     }
   }
 
@@ -2305,7 +2118,6 @@ function paintWilderness(
   const theme = city.theme;
   const biome = getBiome(theme);
 
-  const isSnow = theme === 'snow';
   const isMountain = theme === 'mountain';
   const isHarbor = theme === 'harbor';
 
@@ -2389,7 +2201,7 @@ function paintWilderness(
 
   // 草甸色斑：5-10 个
   const meadowCount = 5 + Math.floor(rng() * 6);
-  const meadowColor = isSnow ? '#dce8f0' : '#c8e098';
+  const meadowColor = '#c8e098';
   for (let i = 0; i < Math.min(meadowCount, candidates.length); i++) {
     const [cx, cz] = candidates[i % candidates.length];
     const r = 6 + rng() * 6;
@@ -2400,7 +2212,7 @@ function paintWilderness(
     (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
   }
 
-  // 森林块：4-8 片（snow 主题用三角松，普通用 scribbleBlob）
+  // 森林块：4-8 片（scribbleBlob 圆团树）
   const forestPatchCount = Math.min(4 + Math.floor(rng() * 5), Math.max(0, candidates.length - meadowCount));
   const forestDensity = isMountain ? 1.5 : 1.0;
   const forestBlobColor = isMountain ? '#c0d8a0' : '#d4ecb0';
@@ -2443,51 +2255,18 @@ function paintWilderness(
       const tz = cz + (rng() - 0.5) * blobR * 1.5;
       const tr = 1.2 + rng() * 1.0;
 
-      if (isSnow) {
-        // snow：三角松（与原有实现一致）
-        const h = tr * 2.2;
-        const trunkH = h * 0.4;
-        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 0.12;
-        ctx.beginPath();
-        ctx.moveTo(tx, tz + trunkH * 0.5);
-        ctx.lineTo(tx, tz + trunkH);
-        ctx.stroke();
-        for (let li = 0; li < 3; li++) {
-          const ly = tz - h * 0.7 + li * (h * 0.3);
-          const lw = h * 0.2 + li * h * 0.15;
-          (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
-          (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
-          ctx.beginPath();
-          ctx.moveTo(tx, ly);
-          ctx.lineTo(tx - lw, ly + h * 0.25);
-          ctx.lineTo(tx + lw, ly + h * 0.25);
-          ctx.closePath();
-          ctx.fill();
-          (ctx as unknown as Record<string, unknown>).fillStyle = '#e8eef2';
-          (ctx as unknown as Record<string, unknown>).globalAlpha = 0.7;
-          ctx.beginPath();
-          ctx.moveTo(tx, ly);
-          ctx.lineTo(tx - h * 0.06, ly + h * 0.1);
-          ctx.lineTo(tx + h * 0.06, ly + h * 0.1);
-          ctx.closePath();
-          ctx.fill();
-          (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-        }
-      } else {
-        // 普通圆团树
-        (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
-        (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
-        scribbleBlob(ctx, rng, tx, tz, tr);
-        ctx.fill();
-        (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
-        (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
-        (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
-        ctx.beginPath();
-        ctx.moveTo(tx, tz);
-        ctx.lineTo(tx, tz + 1.5 + rng() * 0.8);
-        ctx.stroke();
-      }
+      // 圆团树
+      (ctx as unknown as Record<string, unknown>).fillStyle = PAPER.park;
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 0.75;
+      scribbleBlob(ctx, rng, tx, tz, tr);
+      ctx.fill();
+      (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
+      (ctx as unknown as Record<string, unknown>).strokeStyle = PAPER.ink;
+      (ctx as unknown as Record<string, unknown>).lineWidth = 0.10;
+      ctx.beginPath();
+      ctx.moveTo(tx, tz);
+      ctx.lineTo(tx, tz + 1.5 + rng() * 0.8);
+      ctx.stroke();
     }
 
     // 深林：内部林间小径（虚线，4-6 个折点）
@@ -2534,7 +2313,7 @@ function paintWilderness(
 
     // 池塘
     const pondR = 2 + rng() * 1;
-    const pondColor = isSnow ? '#ccdce8' : PAPER.water;
+    const pondColor = PAPER.water;
     (ctx as unknown as Record<string, unknown>).fillStyle = pondColor;
     (ctx as unknown as Record<string, unknown>).globalAlpha = 0.5;
     wobblyCircle(ctx, rng, cx, cz, pondR, 0.12);
@@ -2566,7 +2345,7 @@ function paintWilderness(
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zi) % candidates.length;
     const [zx, zz] = candidates[candidateIdx];
     if (poisOut) poisOut.push({ x: zx, z: zz, r: 10, kind: 'zoo' });
-    paintZoo(ctx, rng, zx, zz, theme);
+    paintZoo(ctx, rng, zx, zz);
   }
 
   // 湿地：districts≥4 时保底 1 个，否则 0-2 个
@@ -2580,7 +2359,7 @@ function paintWilderness(
     const candidateIdx = (meadowCount + forestPatchCount + parkCount + zooCount + wi2) % candidates.length;
     const [wx2, wz2] = candidates[candidateIdx];
     if (poisOut) poisOut.push({ x: wx2, z: wz2, r: 12, kind: 'wetland' });
-    paintWetland(ctx, rng, wx2, wz2, theme, isHarbor);
+    paintWetland(ctx, rng, wx2, wz2, isHarbor);
   }
 
   void biome;
@@ -2685,9 +2464,6 @@ export function buildCityPainter(
       const seaRng = rng0(wsPrefix + ':sea');
       paintSea(ctx, params, seaRng);
       // harbor 无大河，跳过 paintRiver / paintCanal
-    } else if (waterStyle === 'frozen') {
-      const frozenRng = rng0(wsPrefix + ':frozen');
-      paintFrozenRiver(ctx, params, frozenRng);
       // 仍绘制运河（但冻河版本会在 paintCanal 中保持不变）
       const canalRng = rng0(wsPrefix + ':canal');
       paintCanal(ctx, params, canalRng);

@@ -3,24 +3,19 @@ import { BIOMES, getBiome } from '../src/render2d/biomes';
 import { worldParams } from '../src/world/params';
 
 describe('BIOMES — 基础结构', () => {
-  it('四主题均存在', () => {
+  it('三主题均存在', () => {
     expect(BIOMES['plains']).toBeDefined();
     expect(BIOMES['harbor']).toBeDefined();
-    expect(BIOMES['snow']).toBeDefined();
     expect(BIOMES['mountain']).toBeDefined();
   });
 
-  it('getBiome 未知主题回退 plains', () => {
-    const b = getBiome('unknown-theme');
-    expect(b.key).toBe('plains');
+  it('getBiome 未知/已删除主题（含旧 snow）回退 plains', () => {
+    expect(getBiome('unknown-theme').key).toBe('plains');
+    expect(getBiome('snow').key).toBe('plains');
   });
 
   it('harbor waterStyle 为 sea', () => {
     expect(BIOMES['harbor'].waterStyle).toBe('sea');
-  });
-
-  it('snow waterStyle 为 frozen', () => {
-    expect(BIOMES['snow'].waterStyle).toBe('frozen');
   });
 
   it('mountain waterStyle 为 torrent', () => {
@@ -29,10 +24,6 @@ describe('BIOMES — 基础结构', () => {
 
   it('plains waterStyle 为 river', () => {
     expect(BIOMES['plains'].waterStyle).toBe('river');
-  });
-
-  it('snow mountains.proximity < plains mountains.proximity', () => {
-    expect(BIOMES['snow'].mountains.proximity).toBeLessThan(BIOMES['plains'].mountains.proximity);
   });
 
   it('mountain mountains.proximity < plains mountains.proximity', () => {
@@ -48,8 +39,8 @@ describe('BIOMES — 基础结构', () => {
 
 const HW = 50, HD = 50, WR = 200, T = 200;
 
-describe('worldParams — 四主题确定性', () => {
-  const themes = ['plains', 'harbor', 'snow', 'mountain'] as const;
+describe('worldParams — 三主题确定性', () => {
+  const themes = ['plains', 'harbor', 'mountain'] as const;
   for (const theme of themes) {
     it(`${theme}: 同 vault+theme 两次 deep equal (RA, canalPts, lakes)`, () => {
       const p1 = worldParams('vault-biome', HW, HD, WR, T, theme);
@@ -97,13 +88,7 @@ describe('worldParams — harbor coastDist', () => {
   });
 });
 
-describe('worldParams — snow/mountain mountains', () => {
-  it('snow mountains.proximity 实际效果：山带更近城市中心（max peak across < plains）', () => {
-    // 通过对比 MA 偏移量间接验证——这里只验证 worldStyle 字段正确传递
-    const p = worldParams('vault-snow', HW, HD, WR, T, 'snow');
-    expect(p.waterStyle).toBe('frozen');
-  });
-
+describe('worldParams — mountain mountains', () => {
   it('mountain waterStyle 为 torrent', () => {
     const p = worldParams('vault-mountain', HW, HD, WR, T, 'mountain');
     expect(p.waterStyle).toBe('torrent');
@@ -143,9 +128,9 @@ function makeCity(theme: string): CityModel {
   };
 }
 
-const THEMES = ['plains', 'harbor', 'snow', 'mountain'] as const;
+const THEMES = ['plains', 'harbor', 'mountain'] as const;
 
-describe('buildCityPainter — 四主题不抛异常', () => {
+describe('buildCityPainter — 三主题不抛异常', () => {
   for (const theme of THEMES) {
     it(`${theme}: drawStatic 不抛异常`, () => {
       const city = makeCity(theme);
@@ -157,7 +142,7 @@ describe('buildCityPainter — 四主题不抛异常', () => {
   }
 });
 
-describe('buildCityPainter — 四主题确定性', () => {
+describe('buildCityPainter — 三主题确定性', () => {
   for (const theme of THEMES) {
     it(`${theme}: 两次 drawStatic 调用序列相同`, () => {
       const city = makeCity(theme);
@@ -209,15 +194,6 @@ describe('dynamic — waterStyle 适配', () => {
     vaultId: 'dyn-test', name: 'DynCity', theme: 'plains', tier: 'village',
     districts: [], roads: [], noteCount: 0, activeCount7d: 2, generatedAt: Date.now(),
   };
-
-  it('frozen 主题: draw() 不抛异常', () => {
-    const city: CityModel = { ...baseCity, theme: 'snow' };
-    const p = worldParams('vault-snow-dyn', HW, HD, WR, T, 'snow');
-    const layer = createDynamicLayer(city, p, 'ws-snow', []);
-    const { ctx } = makeDynCtx();
-    expect(() => layer.draw(ctx, 0)).not.toThrow();
-    expect(() => layer.draw(ctx, 1)).not.toThrow();
-  });
 
   it('harbor 主题: draw() 不抛异常', () => {
     const city: CityModel = { ...baseCity, theme: 'harbor' };
