@@ -112,8 +112,14 @@ export function createDocPanel(
     if (scrollPending && selectedPath) {
       scrollPending = false;
       const row = body.querySelector<HTMLElement>('.panel-item.selected');
-      if (row && typeof row.scrollIntoView === 'function') {
-        row.scrollIntoView({ block: 'center' });
+      if (row) {
+        // 选中行藏在收起目录里时（如「全部收起」后定位），沿祖先链展开所属目录
+        for (let el = row.parentElement; el && el !== body; el = el.parentElement) {
+          if (el.classList.contains('tree-folder')) el.classList.remove('collapsed');
+        }
+        if (typeof row.scrollIntoView === 'function') {
+          row.scrollIntoView({ block: 'center' });
+        }
       }
     }
   }

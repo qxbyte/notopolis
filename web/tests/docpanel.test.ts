@@ -152,6 +152,34 @@ describe('createDocPanel', () => {
     panel.dispose();
   });
 
+  it('目录树收起时 open(selectPath) 自动展开选中文档的目录链，其余目录保持收起', async () => {
+    stubFetch(true);
+    const panel = createDocPanel(container, { vaultId: 'v1', onLocate: () => undefined });
+    panel.open();
+    await flush();
+    // 先全部收起，再从卡片「定位」进来（选中子目录深处的文档）
+    container.querySelector<HTMLElement>('.tree-toggle-all')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    panel.open('01-AI/papers/Attention.md');
+    await flush();
+    const sel = container.querySelector<HTMLElement>('.panel-item.selected')!;
+    expect(sel.getAttribute('data-path')).toBe('01-AI/papers/Attention.md');
+    // 祖先目录链（01-AI、papers）全部展开，选中行可见
+    let ancestors = 0;
+    for (let el = sel.parentElement; el && el !== container; el = el.parentElement) {
+      if (el.classList.contains('tree-folder')) {
+        ancestors++;
+        expect(el.classList.contains('collapsed')).toBe(false);
+      }
+    }
+    expect(ancestors).toBe(2);
+    // 无关目录（02-Dev）保持收起
+    const dev = [...container.querySelectorAll<HTMLElement>('.tree-folder')].find(
+      (f) => f.querySelector('.tree-fname')?.textContent === '02-Dev',
+    )!;
+    expect(dev.classList.contains('collapsed')).toBe(true);
+    panel.dispose();
+  });
+
   it('点击目录入库按钮：立即出现进度条并发起 index 请求', async () => {
     stubFetch(true);
     const panel = createDocPanel(container, { vaultId: 'v1', onLocate: () => undefined });
