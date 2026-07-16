@@ -37,6 +37,8 @@ export interface VectorStore {
   chunks(): Chunk[];
   getDoc(docPath: string): DocRecord | undefined;
   upsertDoc(doc: DocRecord, chunks: Chunk[], vectors: number[][]): Promise<void>;
+  /** 仅刷新登记表 mtime（内容未变的跳过场景，如重克隆后 mtime 全变），不动向量 */
+  touchDoc(docPath: string, mtimeMs: number): Promise<void>;
   removeDoc(docPath: string): Promise<void>;
   /** 归一化查询向量 → [{chunk, score}] 按余弦降序 */
   search(vector: number[], topN: number): { chunk: Chunk; score: number }[];
@@ -136,6 +138,13 @@ export class FileVectorStore implements VectorStore {
     }
     this.vectors = next;
     this.data.chunks.push(...chunks);
+    await this.persist();
+  }
+
+  async touchDoc(docPath: string, mtimeMs: number): Promise<void> {
+    const rec = this.data.docs.find((d) => d.docPath === docPath);
+    if (!rec || rec.mtimeMs === mtimeMs) return;
+    rec.mtimeMs = mtimeMs;
     await this.persist();
   }
 

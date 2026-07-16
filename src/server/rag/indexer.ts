@@ -32,7 +32,10 @@ export async function indexOneDoc(
   const docHash = contentHash(content);
   const existing = deps.store.getDoc(docPath);
   if (existing && existing.docHash === docHash && existing.model === deps.endpoint.model) {
-    return 'skipped'; // 去重：内容与模型均未变
+    // 去重：内容与模型均未变。mtime 若有变（如删库重克隆）只刷新登记表，
+    // 否则 docStatuses 按 mtime 判 stale 会与「未变跳过」永远矛盾。
+    await deps.store.touchDoc(docPath, st.mtimeMs);
+    return 'skipped';
   }
 
   const title = docPath.split('/').pop()!.replace(/\.md$/, '');
