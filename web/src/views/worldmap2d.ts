@@ -6,6 +6,7 @@
 import { PAPER } from '../render2d/sketch';
 import { TIER } from '../ui/hud';
 import type { WorldVault } from '../api';
+import { currentMode, isDarkTheme, MAP_NIGHT_TINT, setMode, type ThemeMode } from '../ui/theme';
 import {
   createWeather,
   startRain,
@@ -252,6 +253,28 @@ export function showWorldMap2D(
     settingsBtn.addEventListener('click', onSettingsBtnClick);
     container.appendChild(settingsBtn);
   }
+
+  // ---- 明暗模式按钮（设置按钮左侧）：亮色→暗色→跟随系统 三态循环 ----
+  const MODE_UI: Record<ThemeMode, { icon: string; label: string }> = {
+    light: { icon: '☀', label: '亮色' },
+    dark: { icon: '☾', label: '暗色' },
+    system: { icon: '◐', label: '系统' },
+  };
+  const NEXT_MODE: Record<ThemeMode, ThemeMode> = { light: 'dark', dark: 'system', system: 'light' };
+  const modeBtn = document.createElement('button');
+  modeBtn.id = 'theme-mode-btn';
+  const renderModeBtn = (): void => {
+    const mode = currentMode() ?? (isDarkTheme() ? 'dark' : 'light');
+    modeBtn.textContent = `${MODE_UI[mode].icon} ${MODE_UI[mode].label}`;
+    modeBtn.title = `页面明暗（点击切换）：当前${MODE_UI[mode].label}`;
+  };
+  const onModeBtnClick = (): void => {
+    setMode(NEXT_MODE[currentMode() ?? (isDarkTheme() ? 'dark' : 'light')]);
+    renderModeBtn();
+  };
+  renderModeBtn();
+  modeBtn.addEventListener('click', onModeBtnClick);
+  container.appendChild(modeBtn);
 
   // ---- 固定视角（无缩放/平移）：contain 适配窗口，一屏展示全貌 ----
   let scale = 1;
@@ -717,6 +740,24 @@ export function showWorldMap2D(
       ctx.globalAlpha = 1;
     }
 
+    // 城邦印章（名称标签在夜幕滤镜之后绘制，保证暗色主题下文字可读）
+    for (let i = 0; i < vaults.length; i++) {
+      const pos = vaultPositions[i];
+      drawStamp(ctx, pos.x, pos.z, vaults[i]);
+    }
+
+    // 暗色主题：夜幕滤镜——multiply 压暗手绘图层（文字统一在滤镜后绘制）。
+    // 世界地图底色本就跟随暗色令牌，滤镜减弱（0.6）只压亮色印章/点缀，避免全图漆黑。
+    if (isDarkTheme()) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = MAP_NIGHT_TINT;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+
     // 空状态：还没有仓库时给出指引
     if (vaults.length === 0) {
       const hintPx = 19 * dpr;
@@ -733,12 +774,9 @@ export function showWorldMap2D(
       ctx.restore();
     }
 
-    // 城邦印章
+    // 城邦名称标签（印章下方；逆缩放绘制，字号按 CSS 像素 × dpr 保证清晰可读）
     for (let i = 0; i < vaults.length; i++) {
       const pos = vaultPositions[i];
-      drawStamp(ctx, pos.x, pos.z, vaults[i]);
-
-      // 城邦名称标签（印章下方；逆缩放绘制，字号按 CSS 像素 × dpr 保证清晰可读）
       const labelPx = 15 * dpr;
       ctx.save();
       ctx.translate(pos.x, pos.z);
@@ -788,6 +826,8 @@ export function showWorldMap2D(
         settingsBtn.remove();
         settingsBtn = null;
       }
+      modeBtn.removeEventListener('click', onModeBtnClick);
+      modeBtn.remove();
     },
   };
 }

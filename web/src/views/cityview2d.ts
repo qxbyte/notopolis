@@ -16,7 +16,7 @@ import { createCards } from '../ui/cards';
 import { createNoteModal } from '../ui/notemodal';
 import { fetchNote, ragAsk, ragDocs, ragFeedback, ragGetConfig, ragSearch, saveNote } from '../api';
 import { collectVectorMarks, drawBookMark, type VectorMark } from '../render2d/vectormarks';
-import { cssToken } from '../ui/theme';
+import { cssToken, isDarkTheme, MAP_NIGHT_TINT } from '../ui/theme';
 import { createSearchUI } from '../ui/search';
 import { searchNotes, type SearchItem } from '../util/search';
 import { createTaskPanel } from '../ui/taskpanel';
@@ -109,7 +109,7 @@ export function showCity2D(
   const minZ = cityMinZ;
   const maxZ = cityMaxZ;
 
-  // 城市 bbox（含 12% 余量——入城第一眼能看到周边地貌：海岸/山脉/雪原），用于初始镜头 fit
+  // 城市 bbox（含 12% 余量——入城第一眼能看到周边地貌：海岸/山脉），用于初始镜头 fit
   const cityPadX = (cityMaxX - cityMinX) * 0.12;
   const cityPadZ = (cityMaxZ - cityMinZ) * 0.12;
   const cityFitBounds = {
@@ -595,6 +595,15 @@ export function showCity2D(
         ctx.stroke();
         cc.globalAlpha = 1;
       }
+    }
+
+    // 暗色主题：夜幕滤镜——multiply 压暗整张图纸（受图纸圆角 clip 约束，线稿保留 → 城市夜景）
+    if (isDarkTheme()) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = MAP_NIGHT_TINT;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
     }
 
     ctx.restore();

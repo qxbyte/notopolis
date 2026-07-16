@@ -2,8 +2,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyTheme,
+  currentMode,
   currentTheme,
   initTheme,
+  isDarkTheme,
+  setMode,
   setTheme,
   THEMES,
   tokensOf,
@@ -72,6 +75,43 @@ describe('theme（单一数据源主题系统）', () => {
     localStorage.setItem('notopolis-theme', 'weird');
     initTheme();
     expect(currentTheme()).toBe('lime');
+  });
+});
+
+describe('明暗模式（亮/暗/跟随系统）', () => {
+  it('setMode(dark) 应用暗夜主题且 isDarkTheme 为真', () => {
+    setMode('dark');
+    expect(currentTheme()).toBe('dark');
+    expect(isDarkTheme()).toBe(true);
+    expect(currentMode()).toBe('dark');
+  });
+
+  it('setMode(light) 应用荧光绿默认且 isDarkTheme 为假', () => {
+    setMode('light');
+    expect(currentTheme()).toBe('lime');
+    expect(isDarkTheme()).toBe(false);
+    expect(currentMode()).toBe('light');
+  });
+
+  it('setMode(system)：jsdom 无 matchMedia 时安全回落亮色', () => {
+    setMode('system');
+    expect(currentTheme()).toBe('lime');
+    expect(currentMode()).toBe('system');
+  });
+
+  it('设置中心显式选主题清除模式覆盖（自定义优先）', () => {
+    setMode('dark');
+    setTheme('matcha');
+    expect(currentMode()).toBeNull();
+    expect(currentTheme()).toBe('matcha');
+  });
+
+  it('initTheme：模式优先于显式主题恢复', () => {
+    setMode('dark');
+    localStorage.setItem('notopolis-theme', 'indigo'); // 手写旧值制造冲突
+    delete document.documentElement.dataset.theme;
+    initTheme();
+    expect(currentTheme()).toBe('dark');
   });
 });
 

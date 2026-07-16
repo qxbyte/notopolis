@@ -29,6 +29,8 @@ export interface ThemeDef {
   id: string;
   label: string;
   desc: string;
+  /** 深色主题标记：地图 canvas 侧据此叠加夜幕滤镜（multiply 压暗手绘图层） */
+  dark?: boolean;
   /** 与基础主题（BASE_TOKENS）的差异；缺省项自动继承 */
   tokens: Partial<ThemeTokens>;
 }
@@ -132,6 +134,7 @@ export const THEMES = [
     id: 'dark',
     label: '暗夜',
     desc: '深色 · 近黑底，提亮绿点缀',
+    dark: true,
     tokens: {
       primary: '#8FBC6E',
       onPrimary: '#141414',
@@ -182,11 +185,12 @@ export function applyTheme(id: ThemeId): void {
   root.dataset.theme = id;
 }
 
-/** 应用并持久化 */
+/** 应用并持久化（设置中心显式选主题 = 自定义，清除明暗模式覆盖） */
 export function setTheme(id: ThemeId): void {
   applyTheme(id);
   try {
     localStorage.setItem(STORAGE_KEY, id);
+    localStorage.removeItem(MODE_KEY);
   } catch {
     /* 无痕模式等场景下静默 */
   }
@@ -197,19 +201,75 @@ export function currentTheme(): ThemeId {
   return isThemeId(v) ? v : DEFAULT;
 }
 
+/** 当前主题是否深色（地图夜幕滤镜开关） */
+export function isDarkTheme(): boolean {
+  const def = THEMES.find((t) => t.id === currentTheme());
+  return (def as ThemeDef | undefined)?.dark ?? false;
+}
+
+/** 地图夜幕滤镜色：深色主题下以 multiply 合成压暗整张手绘地图（线稿保留 → 城市夜景） */
+export const MAP_NIGHT_TINT = '#515c72';
+
+/* ---- 明暗模式（顶栏快速切换）：亮色=荧光绿默认 / 暗色=暗夜 / 跟随系统 ---- */
+
+export type ThemeMode = 'light' | 'dark' | 'system';
+const MODE_KEY = 'notopolis-theme-mode';
+
+function systemPrefersDark(): boolean {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function themeForMode(mode: ThemeMode): ThemeId {
+  if (mode === 'system') return systemPrefersDark() ? 'dark' : DEFAULT;
+  return mode === 'dark' ? 'dark' : DEFAULT;
+}
+
+/** 当前明暗模式；null = 用户在设置中心显式选过主题（自定义，不受模式管） */
+export function currentMode(): ThemeMode | null {
+  try {
+    const v = localStorage.getItem(MODE_KEY);
+    return v === 'light' || v === 'dark' || v === 'system' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 切换明暗模式并应用对应主题 */
+export function setMode(mode: ThemeMode): void {
+  applyTheme(themeForMode(mode));
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+    localStorage.setItem(STORAGE_KEY, themeForMode(mode));
+  } catch {
+    /* ignore */
+  }
+}
+
 /** 读取当前生效的 CSS 令牌值（canvas 绘制侧取主题色用） */
 export function cssToken(name: string, fallback: string): string {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 
-/** 启动时恢复上次主题（main.ts 调用） */
+/** 启动时恢复上次主题（main.ts 调用）：明暗模式优先，其次显式主题 */
 export function initTheme(): void {
-  let saved: string | null = null;
-  try {
-    saved = localStorage.getItem(STORAGE_KEY);
-  } catch {
-    /* ignore */
+  const mode = currentMode();
+  if (mode) {
+    applyTheme(themeForMode(mode));
+  } else {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    applyTheme(isThemeId(saved) ? saved : DEFAULT);
   }
-  applyTheme(isThemeId(saved) ? saved : DEFAULT);
+  // 跟随系统：系统明暗切换时实时跟随
+  if (typeof window.matchMedia === 'function') {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+      if (currentMode() === 'system') applyTheme(themeForMode('system'));
+    });
+  }
 }
