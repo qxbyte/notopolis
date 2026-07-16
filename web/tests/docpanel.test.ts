@@ -180,6 +180,42 @@ describe('createDocPanel', () => {
     panel.dispose();
   });
 
+  it('入库完成：顶部 toast 提示，列表内不再固定完成条', async () => {
+    // 自定义 stub：index 调用后 progress 返回已完成
+    let indexed = false;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      const json = (body: unknown): Response =>
+        new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (u.includes('/api/rag/config')) {
+        return json({ enabled: true, embedding: { mode: 'local', local: {}, remote: {} }, chat: { mode: 'off' }, retrieval: {} });
+      }
+      if (u.includes('/docs')) return json({ docs: DOCS });
+      if (u.includes('/progress')) {
+        return json(indexed
+          ? { running: false, total: 4, done: 4, skipped: 3, current: null, errors: [], startedAt: 1, finishedAt: 2 }
+          : { running: false, total: 0, done: 0, skipped: 0, current: null, errors: [], startedAt: null, finishedAt: null });
+      }
+      if (u.includes('/index') && init?.method === 'POST') {
+        indexed = true;
+        return json({ ok: true });
+      }
+      return json({});
+    }));
+    const panel = createDocPanel(container, { vaultId: 'v1', onLocate: () => undefined });
+    panel.open();
+    await flush();
+    container.querySelector<HTMLElement>('.tree-folder-head .act-index')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+    // 完成提醒在窗口顶部 toast，而非列表内固定条
+    const toastEl = document.querySelector('#toast-root .toast');
+    expect(toastEl?.textContent).toContain('入库完成');
+    expect(toastEl?.textContent).toContain('1 篇更新 · 3 篇未变跳过');
+    expect(container.querySelector('.docpanel-progress.done')).toBeNull();
+    panel.dispose();
+  });
+
   it('点击目录入库按钮：立即出现进度条并发起 index 请求', async () => {
     stubFetch(true);
     const panel = createDocPanel(container, { vaultId: 'v1', onLocate: () => undefined });

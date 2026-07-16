@@ -9,6 +9,7 @@ import type { RagDocStatus } from '@shared/types';
 import { buildTree, renderTree } from '../util/tree';
 import { ICON } from './icons';
 import { createSidePanel } from './panel';
+import { toast } from './toast';
 
 export interface DocPanel {
   /** selectPath 传入时该文档行带选中色并滚动到可视区（卡片「返回列表」用） */
@@ -167,14 +168,16 @@ export function createDocPanel(
         return;
       }
       body.classList.remove('indexing');
-      // 任务结束：重取状态（印章即时更新）
+      // 任务结束：重取状态（印章即时更新）；完成回执走顶部 toast，不在列表内固定
       docs = await ragDocs(opts.vaultId);
       const errN = p.errors.length;
-      render(
-        p.finishedAt
-          ? `<div class="docpanel-progress done">入库完成：${p.done - p.skipped - errN} 篇更新 · ${p.skipped} 篇未变跳过${errN ? ` · ${errN} 篇失败` : ''}</div>`
-          : '',
-      );
+      render();
+      if (p.finishedAt) {
+        toast(
+          `入库完成：${p.done - p.skipped - errN} 篇更新 · ${p.skipped} 篇未变跳过${errN ? ` · ${errN} 篇失败` : ''}`,
+          errN ? 'err' : 'ok',
+        );
+      }
     } catch {
       body.classList.remove('indexing');
     }
@@ -198,7 +201,8 @@ export function createDocPanel(
       void poll();
     } catch (e) {
       body.classList.remove('indexing');
-      render(`<div class="docpanel-progress err">入库失败：${esc((e as Error).message)}</div>`);
+      render();
+      toast(`入库失败：${(e as Error).message}`, 'err');
     }
   }
 

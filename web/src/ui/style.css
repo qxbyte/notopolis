@@ -464,8 +464,6 @@
 .docpanel-progress { position: sticky; top: 0; z-index: 1; background: var(--surface);
   margin: 0; padding: 12px 16px; font-size: 12px; color: var(--text);
   border-bottom: 1px solid var(--border); }
-.docpanel-progress.done { color: var(--accent-text); font-weight: 600; }
-.docpanel-progress.err { color: var(--danger); }
 .dp-bar { height: 6px; border-radius: var(--pill); background: var(--primary-soft); overflow: hidden;
   margin-bottom: 6px; }
 .dp-fill { height: 100%; background: var(--primary); border-radius: var(--pill); transition: width .3s; }
