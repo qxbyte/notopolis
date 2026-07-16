@@ -63,7 +63,7 @@ export const BIOMES: Record<string, BiomeSpec> = {
 
   harbor: {
     key: 'harbor',
-    ground: { paper: '#f5f0e2', patch: '#e8e0c8' },   // 略带盐白的沙地
+    ground: { paper: PAPER.paper, patch: '#dde5e0' },   // 淡冷灰白 + 盐沼灰绿斑块（弃暖沙 #f5f0e2/#e8e0c8）
     waterStyle: 'sea',
     mountains: { proximity: 40, density: -2, snowline: 0.9 },
     vegetation: { kind: 'palm-ish', density: 0.5 },

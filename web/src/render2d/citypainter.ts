@@ -397,11 +397,11 @@ function paintSea(
   wobblyPath(ctx, rng, coastPts, 1.2);
   ctx.stroke();
 
-  // 沙滩带（岸内侧 3 世界单位 sand 色条）
+  // 沙滩带（沿岸约 3 世界单位的米黄沙带：内陆地表改冷灰白后，暖沙只留在海岸线）
   const sandColor = '#e8d8a0';
   (ctx as unknown as Record<string, unknown>).strokeStyle = sandColor;
-  (ctx as unknown as Record<string, unknown>).lineWidth = 0.25;
-  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.35;
+  (ctx as unknown as Record<string, unknown>).lineWidth = 3;
+  (ctx as unknown as Record<string, unknown>).globalAlpha = 0.4;
   wobblyPath(ctx, rng, coastPts, 0.5);
   ctx.stroke();
   (ctx as unknown as Record<string, unknown>).globalAlpha = 1;
